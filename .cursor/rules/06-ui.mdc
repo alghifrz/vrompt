@@ -1,0 +1,83 @@
+---
+description: Vrompt UI and UX principles
+globs: ["app/**", "src/app/**", "src/components/**", "components/**"]
+alwaysApply: false
+---
+
+# UI Rules
+
+## Product Feel
+
+Vrompt should feel like a modern developer tool.
+
+Avoid making the product look like a generic AI chatbot.
+
+The interface should emphasize:
+
+- structure
+- clarity
+- progress
+- project context
+- reviewability
+- generated artifacts
+
+## Guided Interview
+
+The interview should feel progressive rather than like a giant form.
+
+Prefer:
+
+- focused questions
+- clear sections
+- visible progress
+- sensible defaults
+- editable answers
+
+## Review
+
+Generated project context should be reviewable before export.
+
+Users should understand:
+
+- what was generated
+- what changed
+- what target tool will receive
+- where limitations exist
+
+## Components
+
+Prefer small reusable components with clear responsibilities.
+
+Avoid giant page components containing all business logic.
+
+Business logic should live outside presentation components when practical.
+
+## Accessibility
+
+Use semantic HTML.
+
+Support:
+
+- keyboard navigation
+- visible focus states
+- readable contrast
+- useful labels
+- meaningful error messages
+
+## Responsive Design
+
+The primary workflow must work on common desktop and laptop sizes.
+
+Do not optimize solely for a single viewport.
+
+## Animation
+
+Use motion selectively.
+
+Animation should communicate:
+
+- progress
+- state changes
+- hierarchy
+
+Do not animate every element merely because the framework can do it.

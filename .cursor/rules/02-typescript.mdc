@@ -1,0 +1,69 @@
+---
+description: TypeScript coding standards and type safety rules
+globs: ["**/*.ts", "**/*.tsx"]
+alwaysApply: false
+---
+
+# TypeScript Rules
+
+## General
+
+Use TypeScript strictly.
+
+Prefer:
+
+- explicit domain types
+- discriminated unions
+- readonly data where appropriate
+- small functions
+- narrow interfaces
+- predictable return types
+
+Avoid:
+
+- `any`
+- unnecessary type assertions
+- `as unknown as`
+- duplicated domain types
+- hidden mutation
+
+## Runtime Validation
+
+TypeScript types do not validate runtime data.
+
+Use Zod for:
+
+- ProjectSpec
+- LLM structured output
+- external API payloads
+- persisted data boundaries
+- user-controlled input where validation matters
+
+Keep schemas close to the domain they validate.
+
+## Domain Types
+
+ProjectSpec must have one canonical representation.
+
+Do not recreate ProjectSpec independently in:
+
+- UI
+- API routes
+- database models
+- renderer implementations
+
+Transform data explicitly at boundaries.
+
+## Error Handling
+
+Use typed errors or explicit result patterns when useful.
+
+Do not silently swallow failures.
+
+Errors should contain enough context to diagnose the problem without exposing secrets.
+
+## Imports
+
+Prefer stable aliases where configured.
+
+Avoid deeply nested relative imports when a project alias makes ownership clearer.

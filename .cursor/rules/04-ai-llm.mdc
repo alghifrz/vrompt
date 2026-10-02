@@ -1,0 +1,79 @@
+---
+description: LLM integration, structured output, reliability, and provider abstraction
+globs: ["src/llm/**", "packages/llm/**", "src/app/**/api/**", "app/api/**"]
+alwaysApply: false
+---
+
+# AI and LLM Rules
+
+## Provider Independence
+
+LLM usage must go through an application-level interface.
+
+Do not couple core logic directly to a specific provider.
+
+Prefer a contract similar to:
+
+```ts
+interface LlmClient {
+  generate<T>(input: LlmRequest): Promise<T>
+}
+```
+
+The exact interface may evolve with implementation needs.
+
+## Structured Output
+
+Prefer structured outputs over free-form text when the result feeds application logic.
+
+Validate all LLM-generated structured data with Zod.
+
+Never trust an LLM response merely because it parsed successfully.
+
+## Prompt Design
+
+Prompts should:
+
+- clearly define the task
+- define expected output
+- include relevant project context
+- avoid unnecessary verbosity
+- separate instructions from user-provided content
+
+Keep prompts versionable and testable where practical.
+
+## Reliability
+
+For recoverable LLM failures:
+
+- use bounded retries
+- validate every attempt
+- avoid infinite retry loops
+- preserve useful error information
+
+Do not hide provider failures behind generic success responses.
+
+## Security
+
+Treat user-provided project descriptions and generated content as untrusted data.
+
+Consider prompt injection when external content is included in LLM input.
+
+Never expose:
+
+- API keys
+- secrets
+- internal credentials
+- private environment variables
+
+to generated output.
+
+## Responsibility Boundary
+
+LLMs may help with:
+
+- extracting structured requirements
+- suggesting project context
+- generating drafts
+
+LLMs must not become the only source of truth for domain validation.

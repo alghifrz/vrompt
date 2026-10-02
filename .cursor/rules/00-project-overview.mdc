@@ -1,0 +1,60 @@
+--- 
+description: Core project context and product principles for Vrompt
+alwaysApply: true
+---
+
+# Vrompt Project Overview
+
+## Purpose
+
+Vrompt is an AI-powered project context generator for developers who use AI coding tools.
+
+Vrompt helps developers turn an idea into structured project context, specifications, rules, prompts, and tool-specific outputs.
+
+## Core Flow
+
+Idea → Guided Interview → Project Specification → Context Generation → Tool-specific Adapters → Review → Export
+
+## Product Principles
+
+- ProjectSpec is the canonical source of truth.
+- Generated markdown, rules, and prompts are derived outputs.
+- Core domain logic must remain independent from UI, database, authentication, and LLM providers.
+- Tool-specific behavior belongs inside adapters.
+- Generated output should be deterministic where possible.
+- Graceful degradation must be explicit when a target tool lacks a capability.
+- Prefer simple, explicit architecture over premature abstraction.
+- Build the smallest useful implementation before adding infrastructure.
+
+## Initial Target Tools
+
+- Cursor
+- Qoder
+- Claude Code
+
+## MVP
+
+The MVP focuses on:
+
+1. Guided project interview
+2. Typed ProjectSpec
+3. Context generation
+4. Tool adapters
+5. Output review
+6. Export
+
+## Deferred
+
+Do not implement unless explicitly requested:
+
+- GitHub synchronization
+- Drift detection
+- MCP
+- Team collaboration
+- Billing
+- Marketplace
+- Advanced integrations
+
+## Engineering Rule
+
+Before implementing a feature, understand which layer owns it and whether it belongs in the MVP.

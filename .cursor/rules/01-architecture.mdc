@@ -1,0 +1,99 @@
+---
+description: Architecture boundaries, dependency direction, and project structure
+alwaysApply: true
+---
+
+# Architecture Rules
+
+## Dependency Direction
+
+Use this general dependency direction:
+
+UI → Application → Core
+
+Infrastructure may implement interfaces defined by Core/Application.
+
+Core must not depend on:
+
+- Next.js
+- React
+- database clients
+- Clerk
+- HTTP clients
+- LLM providers
+- browser APIs
+
+## Layer Responsibilities
+
+### Core
+
+Contains:
+
+- domain types
+- ProjectSpec
+- validation schemas
+- renderer contracts
+- adapter contracts
+- deterministic generation logic
+- domain-level errors
+
+### Application
+
+Contains:
+
+- use cases
+- orchestration
+- interview workflows
+- context generation workflows
+- application services
+
+### Infrastructure
+
+Contains:
+
+- database implementations
+- authentication integrations
+- LLM clients
+- external APIs
+- storage
+- environment configuration
+
+### UI
+
+Contains:
+
+- pages
+- layouts
+- components
+- forms
+- client interactions
+- presentation state
+
+## Repository Structure
+
+Prefer a structure similar to:
+
+```text
+src/
+  app/
+  components/
+  core/
+  application/
+  infrastructure/
+  lib/
+  types/
+tests/
+```
+
+Do not create folders merely to make the repository look sophisticated.
+
+## Change Safety
+
+Before modifying an existing abstraction:
+
+1. Find all usages.
+2. Understand its responsibility.
+3. Check whether the change belongs in its current layer.
+4. Prefer the smallest compatible change.
+
+Avoid circular dependencies and unnecessary cross-layer imports.

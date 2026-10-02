@@ -1,0 +1,56 @@
+---
+description: Testing standards for Vrompt
+globs: ["**/*.test.ts", "**/*.test.tsx", "**/*.spec.ts", "**/*.spec.tsx"]
+alwaysApply: false
+---
+
+# Testing Rules
+
+## Test Framework
+
+Use Vitest for unit and integration-level application tests where appropriate.
+
+## Priority
+
+Prioritize tests for:
+
+1. ProjectSpec validation
+2. Core generation
+3. Renderers
+4. Tool adapters
+5. Important application workflows
+
+## Deterministic Tests
+
+Core generation should be deterministic.
+
+Use snapshot tests for stable generated artifacts when snapshots provide meaningful regression protection.
+
+Snapshots should be reviewed intentionally, not blindly updated.
+
+## LLM Tests
+
+Do not make ordinary unit tests depend on live LLM providers.
+
+Mock or fake LLM clients.
+
+Test:
+
+- valid structured output
+- malformed output
+- validation failure
+- retry behavior
+- provider failure
+- edge cases
+
+## Test Quality
+
+Tests should verify behavior, not implementation details.
+
+Avoid tests that merely duplicate source code.
+
+When fixing a bug, add a regression test when practical.
+
+## Completion
+
+A feature is not complete if the implementation works only manually while important deterministic behavior remains untested.

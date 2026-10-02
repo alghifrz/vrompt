@@ -1,0 +1,410 @@
+import { LLMError } from "../llm/errors";
+import type { LLMProvider } from "../llm/types";
+import { ProjectSpecSchema, type ProjectSpec } from "../schema/project-spec";
+import { InterviewError, InterviewErrorCode } from "./errors";
+import { parseInterviewResponse } from "./extraction";
+import { commitProjectSpecPatch } from "./merge";
+import {
+  INITIAL_PROJECT,
+  isInterviewPhase,
+  isPhaseSatisfied,
+  isSkippable,
+  isUserConfirmation,
+  nextPhase,
+} from "./phases";
+import {
+  buildInterviewSystemPrompt,
+  buildInterviewUserPrompt,
+} from "./prompts";
+import type {
+  InterviewMessage,
+  InterviewPhase,
+  InterviewQuestion,
+  InterviewSession,
+  InterviewTurnResult,
+} from "./types";
+
+const REQUIRED_QUESTION_PHASES: readonly InterviewPhase[] = [
+  "discovery",
+  "goals",
+  "features",
+  "users",
+  "review",
+];
+
+export function createInitialProjectSpec(): ProjectSpec {
+  return {
+    project: {
+      name: INITIAL_PROJECT.name,
+      description: INITIAL_PROJECT.description,
+      problem: INITIAL_PROJECT.problem,
+      targetUsers: [...INITIAL_PROJECT.targetUsers],
+      type: INITIAL_PROJECT.type,
+      status: INITIAL_PROJECT.status,
+    },
+  };
+}
+
+export function createInterviewSession(input: { id: string }): InterviewSession {
+  const id = input.id.trim();
+  if (!id) {
+    throw new InterviewError(
+      InterviewErrorCode.INVALID_SESSION,
+      "Session id is required.",
+    );
+  }
+
+  return {
+    id,
+    phase: "discovery",
+    spec: createInitialProjectSpec(),
+    messages: [],
+    completed: false,
+    skippedPhases: [],
+    questionSeq: 0,
+  };
+}
+
+function cloneSession(session: InterviewSession): InterviewSession {
+  return {
+    id: session.id,
+    phase: session.phase,
+    spec: structuredClone(session.spec),
+    messages: session.messages.map((message) => ({ ...message })),
+    currentQuestion: session.currentQuestion
+      ? { ...session.currentQuestion }
+      : undefined,
+    completed: session.completed,
+    skippedPhases: [...session.skippedPhases],
+    questionSeq: session.questionSeq,
+  };
+}
+
+function validateSession(session: InterviewSession): InterviewError | undefined {
+  if (!session.id.trim()) {
+    return new InterviewError(
+      InterviewErrorCode.INVALID_SESSION,
+      "Session id is required.",
+    );
+  }
+
+  if (!isInterviewPhase(session.phase)) {
+    return new InterviewError(
+      InterviewErrorCode.PHASE_ERROR,
+      "Session phase is not a known interview phase.",
+    );
+  }
+
+  const parsed = ProjectSpecSchema.safeParse(session.spec);
+  if (!parsed.success) {
+    return new InterviewError(
+      InterviewErrorCode.INVALID_SESSION,
+      "Session ProjectSpec is not valid.",
+    );
+  }
+
+  if (session.completed && session.phase !== "complete") {
+    return new InterviewError(
+      InterviewErrorCode.COMPLETION_ERROR,
+      "A completed session must be in the complete phase.",
+    );
+  }
+
+  return undefined;
+}
+
+function questionFor(
+  phase: InterviewPhase,
+  seq: number,
+  text: string,
+): InterviewQuestion {
+  return {
+    id: `q-${phase}-${String(seq)}`,
+    phase,
+    text,
+    required: REQUIRED_QUESTION_PHASES.includes(phase),
+  };
+}
+
+function appendMessages(
+  messages: readonly InterviewMessage[],
+  extras: readonly InterviewMessage[],
+): InterviewMessage[] {
+  return [...messages, ...extras];
+}
+
+function resultFromSession(
+  session: InterviewSession,
+  extras: {
+    extracted: boolean;
+    error?: InterviewError;
+  },
+): InterviewTurnResult {
+  return {
+    session,
+    question: session.currentQuestion,
+    completed: session.completed,
+    extracted: extras.extracted,
+    error: extras.error,
+  };
+}
+
+function wrapProviderError(error: unknown): InterviewError {
+  if (error instanceof InterviewError) {
+    return error;
+  }
+
+  if (error instanceof LLMError) {
+    return new InterviewError(
+      InterviewErrorCode.PROVIDER_ERROR,
+      error.message,
+      {
+        cause: error,
+        retryable: error.retryable,
+      },
+    );
+  }
+
+  return new InterviewError(
+    InterviewErrorCode.PROVIDER_ERROR,
+    "The language model provider failed.",
+    { cause: error },
+  );
+}
+
+export class InterviewEngine {
+  constructor(private readonly provider: LLMProvider) {}
+
+  async start(session: InterviewSession): Promise<InterviewTurnResult> {
+    return this.executeTurn(session);
+  }
+
+  async runTurn(
+    session: InterviewSession,
+    userAnswer: string,
+  ): Promise<InterviewTurnResult> {
+    return this.executeTurn(session, userAnswer);
+  }
+
+  private async executeTurn(
+    session: InterviewSession,
+    userAnswer?: string,
+  ): Promise<InterviewTurnResult> {
+    const sessionError = validateSession(session);
+    if (sessionError) {
+      return resultFromSession(cloneSession(session), {
+        extracted: false,
+        error: sessionError,
+      });
+    }
+
+    if (session.completed || session.phase === "complete") {
+      return resultFromSession(cloneSession(session), {
+        extracted: false,
+        error: new InterviewError(
+          InterviewErrorCode.COMPLETION_ERROR,
+          "The interview is already complete.",
+        ),
+      });
+    }
+
+    if (userAnswer !== undefined && userAnswer.trim().length === 0) {
+      return resultFromSession(cloneSession(session), {
+        extracted: false,
+        error: new InterviewError(
+          InterviewErrorCode.INVALID_ANSWER,
+          "The user answer cannot be empty.",
+        ),
+      });
+    }
+
+    const next: InterviewSession = {
+      ...cloneSession(session),
+      messages:
+        userAnswer !== undefined
+          ? appendMessages(session.messages, [
+              { role: "user", content: userAnswer },
+            ])
+          : session.messages.map((message) => ({ ...message })),
+    };
+
+    let responseContent: string;
+    try {
+      const response = await this.provider.generate({
+        system: buildInterviewSystemPrompt(session.phase),
+        messages: [
+          {
+            role: "user",
+            content: buildInterviewUserPrompt(session, userAnswer),
+          },
+        ],
+        temperature: 0,
+        metadata: {
+          interviewId: session.id,
+          phase: session.phase,
+        },
+      });
+      responseContent = response.content;
+    } catch (error) {
+      return resultFromSession(next, {
+        extracted: false,
+        error: wrapProviderError(error),
+      });
+    }
+
+    const parsed = parseInterviewResponse(responseContent);
+    let extracted = false;
+    let spec = next.spec;
+    const skippedPhases = [...next.skippedPhases];
+    const confirmed =
+      session.phase === "review" &&
+      userAnswer !== undefined &&
+      isUserConfirmation(userAnswer) &&
+      parsed.extraction?.confirm !== false;
+
+    if (parsed.error && parsed.error.code !== InterviewErrorCode.PATCH_INVALID) {
+      return this.finishTurn(next, {
+        spec,
+        skippedPhases,
+        questionText: parsed.question,
+        extracted: false,
+        error: parsed.error,
+      });
+    }
+
+    if (parsed.error?.code === InterviewErrorCode.PATCH_INVALID) {
+      return this.finishTurn(next, {
+        spec,
+        skippedPhases,
+        questionText: parsed.question,
+        extracted: false,
+        error: parsed.error,
+      });
+    }
+
+    const extraction = parsed.extraction;
+    if (extraction?.patch) {
+      const committed = commitProjectSpecPatch(spec, extraction.patch);
+      if (!committed.ok) {
+        return this.finishTurn(next, {
+          spec,
+          skippedPhases,
+          questionText: parsed.question,
+          extracted: false,
+          error: committed.error,
+        });
+      }
+
+      spec = committed.spec;
+      extracted = true;
+    } else if (extraction) {
+      extracted = true;
+    }
+
+    const skipRequested = Boolean(extraction?.skip) && isSkippable(session.phase);
+    if (skipRequested && !skippedPhases.includes(session.phase)) {
+      skippedPhases.push(session.phase);
+    }
+
+    const phaseSatisfied = isPhaseSatisfied(session.phase, spec, {
+      skipped: skipRequested || skippedPhases.includes(session.phase),
+      confirmed,
+      patch: extraction?.patch,
+    });
+
+    let phase: InterviewPhase = session.phase;
+    if (phaseSatisfied) {
+      phase = nextPhase(session.phase);
+    }
+
+    const completed = phase === "complete";
+    if (completed && !confirmed) {
+      return this.finishTurn(next, {
+        spec,
+        skippedPhases,
+        questionText: parsed.question,
+        extracted,
+        error: new InterviewError(
+          InterviewErrorCode.COMPLETION_ERROR,
+          "The interview cannot complete without explicit review confirmation.",
+        ),
+      });
+    }
+
+    return this.finishTurn(
+      { ...next, phase, completed },
+      {
+        spec,
+        skippedPhases,
+        questionText:
+          parsed.question ??
+          (phase === "review"
+            ? "Please confirm this project specification."
+            : undefined),
+        extracted,
+      },
+    );
+  }
+
+  private finishTurn(
+    session: InterviewSession,
+    input: {
+      spec: ProjectSpec;
+      skippedPhases: InterviewPhase[];
+      questionText?: string;
+      extracted: boolean;
+      error?: InterviewError;
+    },
+  ): InterviewTurnResult {
+    const questionSeq = input.questionText
+      ? session.questionSeq + 1
+      : session.questionSeq;
+    const question = input.questionText
+      ? questionFor(session.phase, questionSeq, input.questionText)
+      : session.currentQuestion;
+
+    const messages = input.questionText
+      ? appendMessages(session.messages, [
+          { role: "assistant", content: input.questionText },
+        ])
+      : session.messages;
+
+    if (
+      !session.completed &&
+      !input.questionText &&
+      !session.currentQuestion &&
+      !input.error
+    ) {
+      return resultFromSession(
+        {
+          ...session,
+          spec: input.spec,
+          skippedPhases: input.skippedPhases,
+          messages,
+          questionSeq,
+        },
+        {
+          extracted: input.extracted,
+          error: new InterviewError(
+            InterviewErrorCode.QUESTION_INVALID,
+            "The model response did not include a usable next question.",
+          ),
+        },
+      );
+    }
+
+    const nextSession: InterviewSession = {
+      ...session,
+      spec: input.spec,
+      skippedPhases: input.skippedPhases,
+      messages,
+      questionSeq,
+      currentQuestion: question,
+    };
+
+    return resultFromSession(nextSession, {
+      extracted: input.extracted,
+      error: input.error,
+    });
+  }
+}

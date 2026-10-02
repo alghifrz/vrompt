@@ -1,0 +1,67 @@
+---
+description: Rules for Vrompt core engine, schemas, renderers, and adapters
+globs: ["src/core/**", "packages/core/**", "packages/renderers/**"]
+alwaysApply: false
+---
+
+# Core Engine Rules
+
+## ProjectSpec
+
+ProjectSpec is the canonical source of truth for generated project context.
+
+All renderers and tool adapters consume ProjectSpec or an explicit derived representation.
+
+Generated files are not the source of truth.
+
+## Deterministic Rendering
+
+Renderer behavior should be deterministic for the same input.
+
+Avoid:
+
+- timestamps in generated content unless explicitly required
+- random identifiers
+- environment-dependent formatting
+- hidden network calls
+
+Generated output should be snapshot-testable.
+
+## ToolAdapter
+
+Tool-specific behavior must be isolated behind an adapter contract.
+
+An adapter should define:
+
+- supported capabilities
+- output format
+- file mapping
+- graceful degradation behavior
+
+Do not scatter Cursor, Qoder, or Claude Code conditionals across the core engine.
+
+## Graceful Degradation
+
+If a target tool cannot represent a capability:
+
+1. Detect the limitation.
+2. Preserve the information where possible.
+3. Make the degradation explicit.
+4. Do not silently discard important project context.
+
+## Generated Files
+
+Generated files should have predictable paths and stable content.
+
+Do not mix generation logic with UI rendering.
+
+## Core-First Development
+
+Keep the core engine usable without:
+
+- Next.js
+- React
+- database
+- authentication
+- network access
+- a specific LLM provider
