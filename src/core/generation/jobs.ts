@@ -208,13 +208,7 @@ function wrapUpJob(spec: ProjectSpec): Omit<GenerationJob, "step"> {
 }
 
 function needsFoundation(spec: ProjectSpec): boolean {
-  return Boolean(
-    spec.stack ||
-      spec.architecture ||
-      spec.database ||
-      spec.security ||
-      spec.stack?.authentication,
-  );
+  return Boolean(spec.stack || spec.architecture || spec.database || spec.security);
 }
 
 function sortedFeatures(spec: ProjectSpec): Feature[] {

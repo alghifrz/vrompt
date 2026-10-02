@@ -102,6 +102,7 @@ describe("project history item", () => {
           stage: "generate",
           href: "/generate/proj-1",
         }}
+        active={false}
       />,
     );
 

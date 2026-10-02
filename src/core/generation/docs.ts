@@ -251,7 +251,7 @@ export function renderPrd(spec: ProjectSpec): string {
       : []),
     ``,
     "```mermaid",
-    prdArchitectureMermaid(spec, view),
+    prdArchitectureMermaid(spec),
     "```",
     ``,
     `### 9.3 API`,
@@ -465,7 +465,7 @@ function prdFeatureMermaid(view: PrdView): string {
   return lines.join("\n");
 }
 
-function prdArchitectureMermaid(spec: ProjectSpec, view: PrdView): string {
+function prdArchitectureMermaid(spec: ProjectSpec): string {
   const web = escapeMermaid(spec.stack?.frontend ?? "Web app");
   const api = escapeMermaid(spec.stack?.backend ?? "Application");
   const db = escapeMermaid(spec.stack?.database ?? "Database");

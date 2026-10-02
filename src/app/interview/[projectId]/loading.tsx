@@ -24,8 +24,8 @@ export default function InterviewLoading() {
           </div>
         </div>
         <div className="flex gap-2 border-b border-white/8 px-4 py-3 sm:px-6">
-          {[24, 20, 28, 20, 24].map((width, index) => (
-            <Bar key={String(index)} className="h-7" />
+          {["w-24", "w-20", "w-28", "w-20", "w-24"].map((width, index) => (
+            <Bar key={String(index)} className={`h-7 ${width}`} />
           ))}
         </div>
         <div className="flex-1 space-y-5 px-4 py-6 sm:px-6">
