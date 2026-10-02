@@ -132,7 +132,7 @@ GET /api/projects/[projectId]/export?targets=cursor,agents-md
 
 The handler authenticates, checks ownership, reloads the persisted spec, validates readiness, and writes paths under `vrompt-export/<target>/`. Absolute paths, `..`, and duplicate entries are rejected.
 
-The interviewer uses a development mock, not a production model vendor.
+The interviewer uses a development mock, not a production model vendor
 
 ## Deployment
 
