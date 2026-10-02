@@ -91,8 +91,8 @@ const generated: GenerationResultView = {
         name: "Visit",
         description: "A scheduled visit.",
         fields: [
-          { type: "string", name: "id", key: "PK" },
-          { type: "string", name: "title" },
+          { type: "string", name: "id", key: "PK", notes: "Primary key for Visit." },
+          { type: "string", name: "title", notes: "Short label shown in lists." },
         ],
       },
       {
@@ -100,8 +100,8 @@ const generated: GenerationResultView = {
         name: "Note",
         description: "A visit note.",
         fields: [
-          { type: "string", name: "id", key: "PK" },
-          { type: "string", name: "visitId", key: "FK" },
+          { type: "string", name: "id", key: "PK", notes: "Primary key for Note." },
+          { type: "string", name: "visitId", key: "FK", notes: "References Visit.id." },
         ],
       },
     ],
@@ -183,6 +183,7 @@ describe("generation UI", () => {
     await user.click(screen.getByRole("button", { name: "Generate" }));
 
     expect(screen.getByRole("button", { name: "Generating..." })).toBeDisabled();
+    expect(screen.getByText("Writing rules, PRD, ERD, and jobs...")).toBeInTheDocument();
   });
 
   it("renders generated files, preview, checks, warnings, and download", async () => {
@@ -234,10 +235,13 @@ describe("generation UI", () => {
     expect(prdPreview).toHaveTextContent("Visit notes are scattered.");
     expect(prdPreview).toHaveTextContent("Dispatcher");
     expect(prdPreview).toHaveTextContent("Visit board");
+    expect(prdPreview).toHaveTextContent("Feature catalog");
 
     await user.click(screen.getByRole("button", { name: "ERD.md" }));
     expect(screen.getByLabelText("Entity relationship diagram")).toBeInTheDocument();
     expect(screen.getByLabelText("Preview of ERD.md")).toHaveTextContent("Visit");
+    expect(screen.getByLabelText("Preview of ERD.md")).toHaveTextContent("Attribute");
+    expect(screen.getByLabelText("Preview of ERD.md")).toHaveTextContent("References Visit.id.");
     expect(screen.getByLabelText("Preview of ERD.md")).toHaveTextContent("one-to-many");
   });
 

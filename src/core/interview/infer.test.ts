@@ -71,4 +71,51 @@ describe("interview infer", () => {
       authentication: "Clerk",
     });
   });
+
+  it("recommends attendance tables instead of Item", () => {
+    const spec = {
+      ...createInitialProjectSpec(),
+      project: {
+        ...createInitialProjectSpec().project,
+        name: "SmartAbsensi",
+        description: "Aplikasi web yang membantu guru mencatat kehadiran siswa.",
+        problem: "Pencatatan kehadiran siswa secara manual setiap hari.",
+        targetUsers: ["guru"],
+      },
+      features: [
+        {
+          id: "feature-1",
+          name: "Mengabsen Siswa",
+          description: "Mencatat kehadiran siswa secara digital.",
+          priority: "must" as const,
+          status: "planned" as const,
+          acceptanceCriteria: [],
+        },
+      ],
+      users: [
+        {
+          id: "user-1",
+          name: "guru",
+          description: "Guru mencatat kehadiran siswa.",
+          goals: ["Mengabsen siswa"],
+          permissions: ["use-app"],
+        },
+      ],
+    };
+
+    const database = recommendPhasePatch("database", spec);
+    const api = recommendPhasePatch("api", spec);
+
+    expect(database?.database?.entities?.map((entity) => entity.name)).toEqual([
+      "Guru",
+      "Siswa",
+      "Kehadiran",
+    ]);
+    expect(api?.api?.endpoints?.some((endpoint) => endpoint.path === "/api/items")).toBe(
+      false,
+    );
+    expect(api?.api?.endpoints?.some((endpoint) => endpoint.path === "/api/kehadiran")).toBe(
+      true,
+    );
+  });
 });

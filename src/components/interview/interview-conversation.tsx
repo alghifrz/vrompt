@@ -29,11 +29,19 @@ function Thinking() {
     <div
       role="status"
       aria-live="polite"
-      className="flex items-center gap-3 px-4 pb-6 sm:px-6"
+      className="flex items-start gap-3 px-4 pb-6 sm:px-6"
     >
       <InterviewerAvatar />
-      <div className="inline-flex items-center gap-3 rounded-2xl rounded-tl-md border border-white/8 bg-[#141414] px-4 py-3">
-        <span aria-hidden="true" className="flex items-center gap-1">
+      <div className="relative overflow-hidden rounded-2xl rounded-tl-md border border-[#d4f26a]/20 bg-[#14160c] px-4 py-3.5">
+        <span
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-[#d4f26a]/70 to-transparent"
+        />
+        <p className="text-xs font-medium text-[#d4f26a]">Interviewer is thinking</p>
+        <p className="mt-1 text-xs leading-5 text-white/45">
+          Reading your answer and preparing the next question.
+        </p>
+        <span aria-hidden="true" className="mt-2.5 flex items-center gap-1.5">
           {[0, 1, 2].map((i) => (
             <motion.i
               key={i}
@@ -47,7 +55,6 @@ function Thinking() {
             />
           ))}
         </span>
-        <span className="text-xs text-white/50">Interviewer is thinking...</span>
       </div>
     </div>
   );

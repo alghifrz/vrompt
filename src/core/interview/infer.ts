@@ -1,4 +1,5 @@
 import type { ProjectSpec } from "../schema/project-spec";
+import { buildDomainModel } from "../spec/domain";
 import {
   INITIAL_PROJECT,
   hasArchitecture,
@@ -252,16 +253,7 @@ export function recommendPhasePatch(
         return undefined;
       }
       return {
-        database: {
-          entities: [
-            {
-              id: "entity-1",
-              name: "Item",
-              description: "The main record a user creates and reviews.",
-            },
-          ],
-          constraints: ["Start with a small Postgres schema for the first version."],
-        },
+        database: recommendedDatabase(spec),
       };
     case "api":
       if (spec.api?.endpoints.length) {
@@ -269,20 +261,12 @@ export function recommendPhasePatch(
       }
       return {
         api: {
-          endpoints: [
-            {
-              method: "GET",
-              path: "/api/items",
-              purpose: "List the main records",
-              authRequired: true,
-            },
-            {
-              method: "POST",
-              path: "/api/items",
-              purpose: "Create a record",
-              authRequired: true,
-            },
-          ],
+          endpoints: buildDomainModel(spec).endpoints.map((endpoint) => ({
+            method: endpoint.method,
+            path: endpoint.path,
+            purpose: endpoint.purpose,
+            authRequired: endpoint.authRequired,
+          })),
         },
       };
     case "security":
@@ -317,4 +301,47 @@ export function recommendPhasePatch(
     default:
       return undefined;
   }
+}
+
+function recommendedDatabase(spec: ProjectSpec): NonNullable<ProjectSpecPatch["database"]> {
+  const domain = buildDomainModel(spec);
+  const nouns = [domain.actor, domain.subject, domain.record].filter(
+    (noun): noun is NonNullable<typeof noun> => Boolean(noun),
+  );
+  const relationships = [
+    domain.subject
+      ? {
+          from: domain.subject.name,
+          to: domain.record.name,
+          type: "one-to-many",
+          description:
+            domain.language === "id"
+              ? `${domain.subject.name} punya banyak ${domain.record.name}.`
+              : `${domain.subject.name} has many ${domain.record.name} rows.`,
+        }
+      : undefined,
+    {
+      from: domain.actor.name,
+      to: domain.record.name,
+      type: "one-to-many",
+      description:
+        domain.language === "id"
+          ? `${domain.actor.name} mencatat ${domain.record.name}.`
+          : `${domain.actor.name} creates ${domain.record.name} rows.`,
+    },
+  ].filter((item): item is NonNullable<typeof item> => Boolean(item));
+
+  return {
+    entities: nouns.map((noun, index) => ({
+      id: `entity-${String(index + 1)}`,
+      name: noun.name,
+      description: noun.description,
+    })),
+    relationships,
+    constraints: [
+      domain.language === "id"
+        ? `Mulai dari skema kecil untuk ${spec.project.name}. Jangan tambah tabel di luar model ini.`
+        : `Start with a small schema for ${spec.project.name}. Do not add tables outside this model.`,
+    ],
+  };
 }

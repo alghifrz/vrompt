@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import type { ErdView, PrdView } from "../../core/generation/docs";
 
 export function GenerationDocPreview({
@@ -21,26 +22,14 @@ export function GenerationDocPreview({
     >
       {isPrd ? <PrdVisual prd={prd} /> : null}
       {isErd ? <ErdVisual erd={erd} /> : null}
-      <MarkdownPreview content={content} />
+      <MarkdownPreview content={content} skipChrome={Boolean(isPrd || isErd)} />
     </div>
   );
 }
 
 function PrdVisual({ prd }: { prd: PrdView }) {
-  const groups = {
-    must: prd.features.filter((feature) => feature.priority === "must"),
-    should: prd.features.filter((feature) => feature.priority === "should"),
-    later: prd.features.filter((feature) => feature.priority === "later"),
-  };
-  const architecture = [
-    "User",
-    prd.stack[0] ?? "Web app",
-    prd.architectureStyle ?? prd.stack[1] ?? "Application",
-    prd.stack.find((item) => /sql|db|postgres|mongo|neon/i.test(item)) ?? "Database",
-  ];
-
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
       <div className="rounded-2xl border border-[#d4f26a]/20 bg-[#d4f26a]/8 p-4">
         <p className="text-[11px] uppercase tracking-[0.16em] text-[#d4f26a]">
           Product
@@ -54,153 +43,48 @@ function PrdVisual({ prd }: { prd: PrdView }) {
         </p>
       </div>
 
-      {prd.goals.length > 0 ? (
-        <div>
-          <p className="mb-2 text-[11px] uppercase tracking-[0.16em] text-white/35">
-            Goals
-          </p>
-          <ol className="space-y-2">
-            {prd.goals.map((goal, index) => (
-              <li
-                key={goal}
-                className="flex gap-3 rounded-xl border border-white/8 bg-white/3 px-3 py-2 text-sm leading-6"
-              >
-                <span className="font-mono text-[11px] text-[#d4f26a]">
-                  {String(index + 1).padStart(2, "0")}
-                </span>
-                <span>{goal}</span>
-              </li>
-            ))}
-          </ol>
-        </div>
+      <PreviewTable
+        caption="Document control"
+        headers={["Field", "Value"]}
+        rows={[
+          ["Product", prd.name],
+          ["Type", prd.type],
+          ["Audience", prd.users.map((user) => user.name).join(", ") || "—"],
+          ["Primary goal", prd.goals[0] ?? "—"],
+        ]}
+      />
+
+      {prd.features.length > 0 ? (
+        <PreviewTable
+          caption="Feature catalog"
+          headers={["Feature", "Priority", "Status", "What it does"]}
+          rows={prd.features.map((feature) => [
+            feature.name,
+            feature.priority,
+            feature.status,
+            feature.description,
+          ])}
+        />
       ) : null}
 
       {prd.users.length > 0 ? (
-        <div className="grid gap-3 sm:grid-cols-2">
-          {prd.users.map((user) => (
-            <article
-              key={user.name}
-              className="rounded-2xl border border-white/8 bg-white/3 p-4"
-            >
-              <p className="text-[11px] uppercase tracking-[0.16em] text-white/35">
-                Persona
-              </p>
-              <p className="mt-1 text-sm font-medium">{user.name}</p>
-              <p className="mt-1 text-sm leading-6 text-white/50">{user.description}</p>
-              {user.goals.length > 0 ? (
-                <p className="mt-2 text-xs leading-5 text-white/40">
-                  Jobs: {user.goals.join(" · ")}
-                </p>
-              ) : null}
-              {user.permissions.length > 0 ? (
-                <p className="mt-1 text-xs text-white/40">
-                  {user.permissions.join(" · ")}
-                </p>
-              ) : null}
-            </article>
-          ))}
-        </div>
+        <PreviewTable
+          caption="Personas"
+          headers={["Persona", "Job", "Permissions"]}
+          rows={prd.users.map((user) => [
+            `${user.name} — ${user.description}`,
+            user.goals.join("; ") || "—",
+            user.permissions.join(", ") || "—",
+          ])}
+        />
       ) : null}
-
-      <div>
-        <p className="mb-2 text-[11px] uppercase tracking-[0.16em] text-white/35">
-          Journey
-        </p>
-        <ol className="flex flex-wrap items-center gap-2">
-          {[
-            prd.users[0]?.name ?? "User",
-            "Sign in",
-            "Home",
-            ...prd.features.slice(0, 3).map((feature) => feature.name),
-            "Done",
-          ].map((step, index, all) => (
-            <li key={`${step}-${String(index)}`} className="flex items-center gap-2">
-              <span className="rounded-full border border-white/10 bg-[#101010] px-3 py-1 text-xs text-white/80">
-                {step}
-              </span>
-              {index < all.length - 1 ? (
-                <span aria-hidden="true" className="text-white/25">
-                  →
-                </span>
-              ) : null}
-            </li>
-          ))}
-        </ol>
-      </div>
-
-      <div className="grid gap-3 md:grid-cols-3">
-        {(
-          [
-            ["Must", groups.must],
-            ["Should", groups.should],
-            ["Later", groups.later],
-          ] as const
-        ).map(([label, features]) => (
-          <div key={label} className="rounded-2xl border border-white/8 bg-[#101010]/80 p-3">
-            <p className="text-[11px] uppercase tracking-[0.16em] text-white/35">{label}</p>
-            <ul className="mt-2 space-y-2">
-              {features.length === 0 ? (
-                <li className="text-sm text-white/35">None</li>
-              ) : (
-                features.map((feature) => (
-                  <li
-                    key={feature.name}
-                    className="rounded-xl border border-white/8 bg-white/3 px-3 py-2"
-                  >
-                    <p className="text-sm">{feature.name}</p>
-                    <p className="mt-1 text-xs leading-5 text-white/40">{feature.description}</p>
-                  </li>
-                ))
-              )}
-            </ul>
-          </div>
-        ))}
-      </div>
-
-      <div>
-        <p className="mb-2 text-[11px] uppercase tracking-[0.16em] text-white/35">
-          Architecture
-        </p>
-        <ol className="flex flex-wrap items-center gap-2">
-          {architecture.map((step, index) => (
-            <li key={`${step}-${String(index)}`} className="flex items-center gap-2">
-              <span className="rounded-xl border border-[#d4f26a]/20 bg-[#d4f26a]/8 px-3 py-1.5 text-xs text-[#d4f26a]">
-                {step}
-              </span>
-              {index < architecture.length - 1 ? (
-                <span aria-hidden="true" className="text-white/25">
-                  →
-                </span>
-              ) : null}
-            </li>
-          ))}
-        </ol>
-      </div>
 
       {prd.endpoints.length > 0 ? (
-        <div className="flex flex-wrap gap-2">
-          {prd.endpoints.map((endpoint) => (
-            <span
-              key={endpoint}
-              className="rounded-full border border-white/10 bg-white/5 px-2.5 py-1 font-mono text-[11px] text-white/65"
-            >
-              {endpoint}
-            </span>
-          ))}
-        </div>
-      ) : null}
-
-      {prd.stack.length > 0 ? (
-        <div className="flex flex-wrap gap-2">
-          {prd.stack.map((item) => (
-            <span
-              key={item}
-              className="rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-xs text-white/70"
-            >
-              {item}
-            </span>
-          ))}
-        </div>
+        <PreviewTable
+          caption="API"
+          headers={["Endpoint"]}
+          rows={prd.endpoints.map((endpoint) => [endpoint])}
+        />
       ) : null}
     </div>
   );
@@ -214,148 +98,117 @@ function ErdVisual({ erd }: { erd: ErdView }) {
           Inferred starting model — refine after the first tables exist.
         </p>
       ) : null}
-      <ErdDiagram erd={erd} />
+      <div
+        role="img"
+        aria-label="Entity relationship diagram"
+        className="grid gap-3 lg:grid-cols-2"
+      >
+        {erd.entities.map((entity) => (
+          <article
+            key={entity.id}
+            className="overflow-hidden rounded-2xl border border-white/10 bg-[#101010]"
+          >
+            <header className="border-b border-[#d4f26a]/25 bg-[#d4f26a]/10 px-3 py-2">
+              <p className="text-sm font-medium text-[#d4f26a]">{entity.name}</p>
+              <p className="mt-0.5 text-xs leading-5 text-white/45">{entity.description}</p>
+            </header>
+            <table className="w-full text-left text-xs">
+              <thead>
+                <tr className="border-b border-white/8 text-white/35">
+                  <th className="px-3 py-1.5 font-medium">Attribute</th>
+                  <th className="px-3 py-1.5 font-medium">Type</th>
+                  <th className="px-3 py-1.5 font-medium">Key</th>
+                  <th className="px-3 py-1.5 font-medium">Notes</th>
+                </tr>
+              </thead>
+              <tbody>
+                {entity.fields.map((item) => (
+                  <tr key={item.name} className="border-t border-white/6">
+                    <td className="px-3 py-1.5 font-mono text-white/85">{item.name}</td>
+                    <td className="px-3 py-1.5 text-white/45">{item.type}</td>
+                    <td className="px-3 py-1.5 font-mono text-[#d4f26a]/85">{item.key ?? "—"}</td>
+                    <td className="px-3 py-1.5 text-white/45">{item.notes ?? "—"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </article>
+        ))}
+      </div>
       {erd.links.length > 0 ? (
-        <ul className="flex flex-wrap gap-2">
-          {erd.links.map((link) => (
-            <li
-              key={`${link.from}-${link.to}-${link.label}`}
-              className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-white/65"
-            >
-              {link.from} <span className="text-white/30">— {link.kind} →</span> {link.to}
-            </li>
-          ))}
-        </ul>
+        <PreviewTable
+          caption="Relationships"
+          headers={["Parent", "Child", "Cardinality", "Meaning"]}
+          rows={erd.links.map((link) => [link.from, link.to, link.kind, link.label])}
+        />
       ) : null}
     </div>
   );
 }
 
-function ErdDiagram({ erd }: { erd: ErdView }) {
-  const boxWidth = 210;
-  const headerHeight = 44;
-  const rowHeight = 22;
-  const gapX = 56;
-  const gapY = 36;
-  const cols = Math.min(Math.max(erd.entities.length, 1), 3);
-  const heights = erd.entities.map(
-    (entity) => headerHeight + entity.fields.length * rowHeight + 10,
-  );
-  const rowMax: number[] = [];
-  heights.forEach((height, index) => {
-    const row = Math.floor(index / cols);
-    rowMax[row] = Math.max(rowMax[row] ?? 0, height);
-  });
-  const boxes = erd.entities.map((entity, index) => {
-    const col = index % cols;
-    const row = Math.floor(index / cols);
-    const y = rowMax.slice(0, row).reduce((sum, item) => sum + item + gapY, 0);
-    return {
-      entity,
-      x: col * (boxWidth + gapX),
-      y,
-      height: heights[index]!,
-    };
-  });
-  const width = Math.max(cols * boxWidth + (cols - 1) * gapX, boxWidth);
-  const height = Math.max(
-    ...boxes.map((box) => box.y + box.height),
-    120,
-  );
-  const byId = new Map(boxes.map((box) => [box.entity.id, box]));
-
+function PreviewTable({
+  caption,
+  headers,
+  rows,
+}: {
+  caption?: string;
+  headers: readonly string[];
+  rows: readonly (readonly string[])[];
+}) {
   return (
-    <svg
-      role="img"
-      aria-label="Entity relationship diagram"
-      viewBox={`0 0 ${String(width)} ${String(height)}`}
-      className="w-full overflow-visible rounded-2xl border border-white/8 bg-[#0a0a0a]"
-    >
-      {erd.links.map((link) => {
-        const from = byId.get(link.from);
-        const to = byId.get(link.to);
-        if (!from || !to) {
-          return null;
-        }
-        const startX = from.x + boxWidth;
-        const startY = from.y + from.height / 2;
-        const endX = to.x;
-        const endY = to.y + headerHeight + 12;
-        const midX = (startX + endX) / 2;
-        return (
-          <g key={`${link.from}-${link.to}-${link.label}`}>
-            <path
-              d={`M ${String(startX)} ${String(startY)} C ${String(midX)} ${String(startY)}, ${String(midX)} ${String(endY)}, ${String(endX)} ${String(endY)}`}
-              fill="none"
-              stroke="rgba(212,242,106,0.45)"
-              strokeWidth="1.5"
-            />
-            <polygon
-              points={`${String(endX)},${String(endY)} ${String(endX - 6)},${String(endY - 4)} ${String(endX - 6)},${String(endY + 4)}`}
-              fill="rgba(212,242,106,0.7)"
-            />
-          </g>
-        );
-      })}
-      {boxes.map((box) => (
-        <g key={box.entity.id} transform={`translate(${String(box.x)} ${String(box.y)})`}>
-          <rect
-            width={boxWidth}
-            height={box.height}
-            rx="12"
-            fill="#101010"
-            stroke="rgba(255,255,255,0.12)"
-          />
-          <rect
-            width={boxWidth}
-            height={headerHeight}
-            rx="12"
-            fill="rgba(212,242,106,0.12)"
-          />
-          <rect x="0" y="32" width={boxWidth} height="12" fill="rgba(212,242,106,0.12)" />
-          <text x="12" y="20" fill="#d4f26a" fontSize="12" fontWeight="600">
-            {box.entity.name}
-          </text>
-          <text x="12" y="36" fill="rgba(255,255,255,0.4)" fontSize="9">
-            {truncate(box.entity.description, 32)}
-          </text>
-          {box.entity.fields.map((field, index) => (
-            <g key={field.name}>
-              <text
-                x="12"
-                y={headerHeight + 16 + index * rowHeight}
-                fill="rgba(255,255,255,0.82)"
-                fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace"
-                fontSize="10"
-              >
-                {field.name}
-              </text>
-              <text
-                x={boxWidth - 12}
-                y={headerHeight + 16 + index * rowHeight}
-                fill={field.key ? "#d4f26a" : "rgba(255,255,255,0.35)"}
-                fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace"
-                fontSize="10"
-                textAnchor="end"
-              >
-                {field.key ? `${field.type} ${field.key}` : field.type}
-              </text>
-            </g>
-          ))}
-        </g>
-      ))}
-    </svg>
+    <div className="overflow-hidden rounded-2xl border border-white/10 bg-[#101010]">
+      {caption ? (
+        <p className="border-b border-white/8 px-3 py-2 text-[11px] uppercase tracking-[0.16em] text-white/40">
+          {caption}
+        </p>
+      ) : null}
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[20rem] text-left text-xs">
+          <thead>
+            <tr className="border-b border-white/8 text-white/40">
+              {headers.map((header) => (
+                <th key={header} className="px-3 py-2 font-medium">
+                  {header}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row, index) => (
+              <tr key={`${row[0] ?? "row"}-${String(index)}`} className="border-t border-white/6">
+                {row.map((cell, cellIndex) => (
+                  <td
+                    key={`${headers[cellIndex] ?? String(cellIndex)}-${cell}`}
+                    className={`px-3 py-2 leading-5 ${
+                      cellIndex === 0 ? "text-white/85" : "text-white/55"
+                    }`}
+                  >
+                    {cell || "—"}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
   );
 }
 
-function MarkdownPreview({ content }: { content: string }) {
+function MarkdownPreview({
+  content,
+  skipChrome = false,
+}: {
+  content: string;
+  skipChrome?: boolean;
+}) {
   const blocks = splitMarkdown(content);
 
   return (
     <div className="space-y-3 border-t border-white/8 pt-4">
       {blocks.map((block, index) => {
         if (block.type === "mermaid") {
-          return (
+          return skipChrome ? null : (
             <pre
               key={`m-${String(index)}`}
               className="overflow-auto rounded-xl border border-white/8 bg-black/30 p-3 font-mono text-[11px] leading-5 text-white/45"
@@ -366,46 +219,80 @@ function MarkdownPreview({ content }: { content: string }) {
         }
 
         return (
-          <div key={`t-${String(index)}`} className="space-y-2 text-sm leading-6 text-white/70">
-            {block.body.split("\n").map((line, lineIndex) => {
-              if (line.startsWith("# ")) {
-                return (
-                  <h3 key={lineIndex} className="text-base font-semibold text-white">
-                    {line.slice(2)}
-                  </h3>
-                );
-              }
-              if (line.startsWith("## ") || line.startsWith("### ")) {
-                return (
-                  <h4 key={lineIndex} className="pt-1 text-sm font-medium text-white/90">
-                    {line.replace(/^#+\s/, "")}
-                  </h4>
-                );
-              }
-              if (line.startsWith("|")) {
-                return (
-                  <p key={lineIndex} className="font-mono text-xs text-white/50">
-                    {line}
-                  </p>
-                );
-              }
-              if (line.startsWith("- ") || line.startsWith("- [")) {
-                return (
-                  <p key={lineIndex} className="pl-3">
-                    {line}
-                  </p>
-                );
-              }
-              if (!line.trim()) {
-                return null;
-              }
-              return <p key={lineIndex}>{line}</p>;
-            })}
-          </div>
+          <MarkdownText
+            key={`t-${String(index)}`}
+            body={block.body}
+            skipTables={skipChrome}
+          />
         );
       })}
     </div>
   );
+}
+
+function MarkdownText({
+  body,
+  skipTables = false,
+}: {
+  body: string;
+  skipTables?: boolean;
+}) {
+  const nodes: ReactNode[] = [];
+  const lines = body.split("\n");
+  let index = 0;
+
+  while (index < lines.length) {
+    const line = lines[index] ?? "";
+    const next = lines[index + 1];
+    if (isTableRow(line) && next && isSeparatorRow(next)) {
+      const table: string[] = [];
+      while (index < lines.length && isTableRow(lines[index] ?? "")) {
+        table.push(lines[index] ?? "");
+        index += 1;
+      }
+      const parsed = parseMarkdownTable(table);
+      if (parsed && !skipTables) {
+        nodes.push(
+          <PreviewTable
+            key={`table-${String(nodes.length)}`}
+            headers={parsed.headers}
+            rows={parsed.rows}
+          />,
+        );
+      }
+      continue;
+    }
+
+    if (line.startsWith("# ")) {
+      nodes.push(
+        <h3 key={nodes.length} className="text-base font-semibold text-white">
+          {line.slice(2)}
+        </h3>,
+      );
+    } else if (line.startsWith("## ") || line.startsWith("### ")) {
+      nodes.push(
+        <h4 key={nodes.length} className="pt-1 text-sm font-medium text-white/90">
+          {line.replace(/^#+\s/, "")}
+        </h4>,
+      );
+    } else if (line.startsWith("- ") || line.startsWith("- [")) {
+      nodes.push(
+        <p key={nodes.length} className="pl-3 text-sm leading-6 text-white/70">
+          {line}
+        </p>,
+      );
+    } else if (line.trim()) {
+      nodes.push(
+        <p key={nodes.length} className="text-sm leading-6 text-white/70">
+          {line}
+        </p>,
+      );
+    }
+
+    index += 1;
+  }
+
+  return <div className="space-y-2">{nodes}</div>;
 }
 
 function splitMarkdown(content: string): { type: "text" | "mermaid"; body: string }[] {
@@ -418,6 +305,31 @@ function splitMarkdown(content: string): { type: "text" | "mermaid"; body: strin
     .filter((part) => part.body.length > 0);
 }
 
-function truncate(value: string, max: number): string {
-  return value.length > max ? `${value.slice(0, max - 1)}…` : value;
+function isTableRow(line: string): boolean {
+  const trimmed = line.trim();
+  return trimmed.startsWith("|") && trimmed.includes("|", 1);
+}
+
+function parseCells(line: string): string[] {
+  return line
+    .trim()
+    .replace(/^\|/, "")
+    .replace(/\|$/, "")
+    .split("|")
+    .map((cell) => cell.trim());
+}
+
+function isSeparatorRow(line: string): boolean {
+  return isTableRow(line) && parseCells(line).every((cell) => /^:?-{3,}:?$/.test(cell));
+}
+
+function parseMarkdownTable(lines: readonly string[]): { headers: string[]; rows: string[][] } | null {
+  const [headerLine, , ...body] = lines;
+  if (!headerLine) {
+    return null;
+  }
+  return {
+    headers: parseCells(headerLine),
+    rows: body.filter((line) => !isSeparatorRow(line)).map(parseCells),
+  };
 }

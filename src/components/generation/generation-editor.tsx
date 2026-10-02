@@ -11,6 +11,7 @@ import {
   type GenerationResultView,
   type GenerationViewError,
 } from "../../lib/generation/view-model";
+import { WorkspaceLoading } from "../app/workspace-loading";
 import { ghostButtonClass, primaryButtonClass } from "../review/form-controls";
 import { GenerationDocPreview } from "./generation-doc-preview";
 import { GenerationJobs } from "./generation-jobs";
@@ -112,7 +113,17 @@ export function GenerationEditor({
   }
 
   return (
-    <div className="flex min-h-full flex-1 flex-col">
+    <div className="relative flex min-h-full flex-1 flex-col">
+      {generating ? (
+        <div className="absolute inset-0 z-30 bg-[#0c0c0c]/88 backdrop-blur-sm">
+          <WorkspaceLoading
+            title="Step 3 of 3"
+            message="Writing rules, PRD, ERD, and jobs..."
+            step={2}
+            embedded
+          />
+        </div>
+      ) : null}
       <header className="sticky top-0 z-20 border-b border-white/8 bg-[#0c0c0c] px-4 py-4 sm:px-6">
         <div className="mx-auto flex w-full max-w-5xl items-start justify-between gap-4">
           <div className="min-w-0">
@@ -261,28 +272,16 @@ export function GenerationEditor({
 
         {result ? (
           <section aria-labelledby="files-heading" className="space-y-5">
-            <div className="flex flex-wrap items-end justify-between gap-3">
-              <div>
-                <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-white/35">
-                  Step 02
-                </p>
-                <h2 id="files-heading" className="mt-1 text-lg font-medium">
-                  Generated files
-                </h2>
-                <p className="mt-1 text-sm text-white/45">
-                  Preview a file, then download the ZIP into your project.
-                </p>
-              </div>
-              <a
-                href={`/api/projects/${page.projectId}/export?targets=${exportQuery(result.selectedTargets)}`}
-                className={`${primaryButtonClass} inline-flex`}
-                aria-busy={downloading}
-                onClick={() => {
-                  setDownloading(true);
-                }}
-              >
-                {downloading ? "Preparing download..." : "Download ZIP"}
-              </a>
+            <div>
+              <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-white/35">
+                Step 02
+              </p>
+              <h2 id="files-heading" className="mt-1 text-lg font-medium">
+                Generated files
+              </h2>
+              <p className="mt-1 text-sm text-white/45">
+                Preview a file, then download the ZIP from the bar below.
+              </p>
             </div>
 
             <div className="grid gap-4 lg:grid-cols-[minmax(0,17rem)_minmax(0,1fr)]">
@@ -447,16 +446,30 @@ export function GenerationEditor({
                 ? "ZIP is ready. Download it, then paste the jobs below."
                 : `Generate ${selected.length === 1 ? "1 target" : `${String(selected.length)} targets`} and a job list.`}
           </p>
-          <button
-            type="button"
-            disabled={generating || selected.length === 0}
-            onClick={() => {
-              void generate();
-            }}
-            className={primaryButtonClass}
-          >
-            {generating ? "Generating..." : "Generate"}
-          </button>
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+            {result ? (
+              <a
+                href={`/api/projects/${page.projectId}/export?targets=${exportQuery(result.selectedTargets)}`}
+                className={`${ghostButtonClass} rounded-full px-5 py-2.5`}
+                aria-busy={downloading}
+                onClick={() => {
+                  setDownloading(true);
+                }}
+              >
+                {downloading ? "Preparing download..." : "Download ZIP"}
+              </a>
+            ) : null}
+            <button
+              type="button"
+              disabled={generating || selected.length === 0}
+              onClick={() => {
+                void generate();
+              }}
+              className={primaryButtonClass}
+            >
+              {generating ? "Generating..." : "Generate"}
+            </button>
+          </div>
         </div>
       </div>
     </div>

@@ -20,11 +20,13 @@ export function GenerationJobs({ jobs }: { jobs: readonly GenerationJob[] }) {
             AI jobs
           </h2>
           <p className="mt-1 max-w-2xl text-sm leading-6 text-white/45">
-            Unzip the export, then paste one prompt at a time. Finish a job
-            before starting the next.
+            Count follows this spec — not a fixed set of seven. Paste one
+            prompt at a time and finish it before the next.
           </p>
         </div>
-        <p className="text-sm text-white/40">{jobs.length} jobs</p>
+        <p className="text-sm text-white/40">
+          {jobs.length} {jobs.length === 1 ? "job" : "jobs"}
+        </p>
       </div>
       <ol className="space-y-2">
         {jobs.map((job) => (
