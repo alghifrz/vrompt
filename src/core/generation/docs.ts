@@ -509,7 +509,7 @@ function prdArchitectureMermaid(spec: ProjectSpec): string {
 }
 
 function specEntities(spec: ProjectSpec, domain: DomainModel): ErdEntityView[] {
-  const entities = (spec.database?.entities ?? [])
+  const entities: ErdEntityView[] = (spec.database?.entities ?? [])
     .filter((entity) => !isPlaceholderEntityName(entity.name))
     .map((entity) => {
       const noun = matchNoun(entity.name, domain);
@@ -518,8 +518,8 @@ function specEntities(spec: ProjectSpec, domain: DomainModel): ErdEntityView[] {
         name: entity.name,
         description: entity.description,
         fields: noun
-          ? fieldsForNoun(noun, domain, spec)
-          : inferFields(entity.name, entity.description, spec, domain),
+          ? fieldsForNoun(noun, domain)
+          : inferFields(entity.name, entity.description, domain),
       };
     });
 
@@ -534,11 +534,11 @@ function domainEntities(spec: ProjectSpec, domain: DomainModel): ErdEntityView[]
   const nouns = [domain.actor, domain.subject, domain.record].filter(
     (noun): noun is NonNullable<typeof noun> => Boolean(noun),
   );
-  const entities = nouns.map((noun) => ({
+  const entities: ErdEntityView[] = nouns.map((noun) => ({
     id: mermaidId(noun.name),
     name: noun.name,
     description: noun.description,
-    fields: fieldsForNoun(noun, domain, spec),
+    fields: fieldsForNoun(noun, domain),
   }));
 
   if (hasAuth(spec)) {
@@ -601,9 +601,15 @@ function applyRelationshipKeys(
   spec: ProjectSpec,
   domain: DomainModel,
 ): ErdEntityView[] {
+  const specRels = usableRelationships(spec);
   const rels =
-    usableRelationships(spec).length > 0
-      ? usableRelationships(spec)
+    specRels.length > 0
+      ? specRels.map((rel) => ({
+          from: rel.from,
+          to: rel.to,
+          type: rel.type,
+          description: rel.description,
+        }))
       : domainRelationships(domain).map((rel) => ({
           from: rel.from,
           to: rel.to,
@@ -647,7 +653,6 @@ function applyRelationshipKeys(
 function fieldsForNoun(
   noun: DomainModel["actor"],
   domain: DomainModel,
-  spec: ProjectSpec,
 ): DocField[] {
   const idNotes = domain.language === "id";
   const actorId = mermaidId(domain.actor.name);
@@ -749,13 +754,12 @@ function fieldsForNoun(
     );
   }
 
-  return inferFields(noun.name, noun.description, spec, domain);
+  return inferFields(noun.name, noun.description, domain);
 }
 
 function inferFields(
   name: string,
   description: string,
-  spec: ProjectSpec,
   domain: DomainModel,
 ): DocField[] {
   const text = `${name} ${description}`.toLowerCase();
@@ -853,8 +857,9 @@ function suggestedQueries(spec: ProjectSpec, view: ErdView): string[] {
   const domain = buildDomainModel(spec);
   const actor = view.entities.find((entity) => entity.id === mermaidId(domain.actor.name));
   const record = view.entities.find((entity) => entity.id === mermaidId(domain.record.name));
-  const subject = domain.subject
-    ? view.entities.find((entity) => entity.id === mermaidId(domain.subject.name))
+  const subjectNoun = domain.subject;
+  const subject = subjectNoun
+    ? view.entities.find((entity) => entity.id === mermaidId(subjectNoun.name))
     : undefined;
   const words = copy(spec);
 
@@ -966,7 +971,9 @@ function authSessionEntity(domain: DomainModel): ErdEntityView {
   };
 }
 
-function usableRelationships(spec: ProjectSpec): NonNullable<ProjectSpec["database"]>["relationships"] {
+function usableRelationships(
+  spec: ProjectSpec,
+): NonNullable<NonNullable<ProjectSpec["database"]>["relationships"]> {
   return (spec.database?.relationships ?? []).filter(
     (rel) => !isPlaceholderEntityName(rel.from) && !isPlaceholderEntityName(rel.to),
   );

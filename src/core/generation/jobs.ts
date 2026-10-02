@@ -333,19 +333,6 @@ function stackLine(spec: ProjectSpec): string {
     .join(", ");
 }
 
-function promptBlock(
-  spec: ProjectSpec,
-  title: string,
-  lines: readonly string[],
-): string {
-  return beginnerPrompt(spec, title, {
-    why: lines,
-    steps: [],
-    done: [],
-    avoid: [],
-  });
-}
-
 function beginnerPrompt(
   spec: ProjectSpec,
   title: string,
