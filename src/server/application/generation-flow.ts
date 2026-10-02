@@ -59,6 +59,7 @@ export function createGenerationFlow(deps: {
             projectId: project.id,
             projectName: project.spec.project.name,
             status: project.spec.project.status,
+            spec: project.spec,
           }),
         };
       } catch (error) {

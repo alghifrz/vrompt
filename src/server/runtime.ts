@@ -2,9 +2,12 @@ import "server-only";
 import { requireAuth } from "./auth/clerk-auth";
 import { createInterviewFlow } from "./application/interview-flow";
 import { createGenerationFlow } from "./application/generation-flow";
+import { createProjectService } from "./application/project-service";
 import { createReviewFlow } from "./application/review-flow";
+import { createWorkspaceFlow } from "./application/workspace-flow";
+import { toWorkspaceProject, type WorkspaceProject } from "../lib/workspace/projects";
 import { getDb } from "./db/client";
-import { createDevelopmentLLMProvider } from "./llm/development-provider";
+import { createInterviewLLMProvider } from "./llm/create-provider";
 import { createInterviewRepository } from "./repositories/interviews";
 import {
   createMemoryInterviewRepository,
@@ -45,7 +48,7 @@ export function getInterviewFlow() {
     requireAuth,
     projects,
     interviews,
-    createProvider: createDevelopmentLLMProvider,
+    createProvider: createInterviewLLMProvider,
   });
 }
 
@@ -54,6 +57,7 @@ export function getReviewFlow() {
   return createReviewFlow({
     requireAuth,
     projects,
+    createProvider: createInterviewLLMProvider,
   });
 }
 
@@ -63,4 +67,32 @@ export function getGenerationFlow() {
     requireAuth,
     projects,
   });
+}
+
+export function getProjectService() {
+  const { projects } = repositories();
+  return createProjectService(requireAuth, projects);
+}
+
+export function getWorkspaceFlow() {
+  const { projects, interviews } = repositories();
+  return createWorkspaceFlow({
+    requireAuth,
+    projects,
+    interviews,
+  });
+}
+
+export async function listWorkspaceProjects(): Promise<WorkspaceProject[]> {
+  const records = await getProjectService().list();
+  return records
+    .slice()
+    .sort((left, right) => right.updatedAt.getTime() - left.updatedAt.getTime())
+    .map((project) =>
+      toWorkspaceProject({
+        id: project.id,
+        name: project.name,
+        status: project.status,
+      }),
+    );
 }

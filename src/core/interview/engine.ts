@@ -3,6 +3,16 @@ import type { LLMProvider } from "../llm/types";
 import { ProjectSpecSchema, type ProjectSpec } from "../schema/project-spec";
 import { InterviewError, InterviewErrorCode } from "./errors";
 import { parseInterviewResponse } from "./extraction";
+import {
+  inferPhasePatch,
+  isAcceptanceAnswer,
+  isExplicitSkipAnswer,
+  isProductPhase,
+  isUnsureAnswer,
+  recommendPhasePatch,
+  recommendationNote,
+  PHASE_OPENERS,
+} from "./infer";
 import { commitProjectSpecPatch } from "./merge";
 import {
   INITIAL_PROJECT,
@@ -172,6 +182,44 @@ function wrapProviderError(error: unknown): InterviewError {
   );
 }
 
+function isRecoverableExtractionError(error: InterviewError): boolean {
+  return (
+    error.code === InterviewErrorCode.EXTRACTION_FAILED ||
+    error.code === InterviewErrorCode.PATCH_INVALID ||
+    error.code === InterviewErrorCode.SPEC_INVALID
+  );
+}
+
+function nextQuestionText(
+  previousPhase: InterviewPhase,
+  next: InterviewPhase,
+  modelQuestion?: string,
+  notedRecommendation = false,
+): string | undefined {
+  if (next === "complete") {
+    return undefined;
+  }
+
+  if (next !== previousPhase) {
+    const opener = PHASE_OPENERS[next];
+    const note = notedRecommendation ? recommendationNote(previousPhase) : "";
+    return note ? `${note}\n\n${opener}` : opener;
+  }
+
+  return modelQuestion && !isSameTopic(modelQuestion, PHASE_OPENERS[next])
+    ? modelQuestion
+    : PHASE_OPENERS[next];
+}
+
+function isSameTopic(left: string, right: string): boolean {
+  const words = right
+    .toLowerCase()
+    .split(/\W+/)
+    .filter((word) => word.length > 4);
+  const haystack = left.toLowerCase();
+  return words.filter((word) => haystack.includes(word)).length >= 3;
+}
+
 export class InterviewEngine {
   constructor(private readonly provider: LLMProvider) {}
 
@@ -262,7 +310,7 @@ export class InterviewEngine {
       isUserConfirmation(userAnswer) &&
       parsed.extraction?.confirm !== false;
 
-    if (parsed.error && parsed.error.code !== InterviewErrorCode.PATCH_INVALID) {
+    if (parsed.error && !isRecoverableExtractionError(parsed.error)) {
       return this.finishTurn(next, {
         spec,
         skippedPhases,
@@ -272,44 +320,84 @@ export class InterviewEngine {
       });
     }
 
-    if (parsed.error?.code === InterviewErrorCode.PATCH_INVALID) {
-      return this.finishTurn(next, {
-        spec,
-        skippedPhases,
-        questionText: parsed.question,
-        extracted: false,
-        error: parsed.error,
-      });
-    }
-
-    const extraction = parsed.extraction;
+    const extraction = parsed.error ? undefined : parsed.extraction;
     if (extraction?.patch) {
       const committed = commitProjectSpecPatch(spec, extraction.patch);
-      if (!committed.ok) {
-        return this.finishTurn(next, {
-          spec,
-          skippedPhases,
-          questionText: parsed.question,
-          extracted: false,
-          error: committed.error,
-        });
+      if (committed.ok) {
+        spec = committed.spec;
+        extracted = true;
       }
-
-      spec = committed.spec;
-      extracted = true;
     } else if (extraction) {
       extracted = true;
     }
 
-    const skipRequested = Boolean(extraction?.skip) && isSkippable(session.phase);
+    const userSkipped =
+      userAnswer !== undefined && isExplicitSkipAnswer(userAnswer);
+    const skipRequested = isSkippable(session.phase) && userSkipped;
+    let patch = extraction?.patch;
+    let notedRecommendation = false;
+
+    if (userAnswer !== undefined && !skipRequested) {
+      const alreadySatisfied = isPhaseSatisfied(session.phase, spec, {
+        skipped: skippedPhases.includes(session.phase),
+        confirmed,
+        patch,
+      });
+      const wantsHelp =
+        !isProductPhase(session.phase) &&
+        (isUnsureAnswer(userAnswer) || isAcceptanceAnswer(userAnswer));
+
+      if (!alreadySatisfied || wantsHelp) {
+        const fallback = isProductPhase(session.phase)
+          ? inferPhasePatch(session.phase, userAnswer, spec)
+          : wantsHelp
+            ? recommendPhasePatch(session.phase, spec) ??
+              inferPhasePatch(session.phase, userAnswer, spec)
+            : inferPhasePatch(session.phase, userAnswer, spec) ??
+              recommendPhasePatch(session.phase, spec);
+
+        if (fallback) {
+          const committed = commitProjectSpecPatch(spec, fallback);
+          if (committed.ok) {
+            spec = committed.spec;
+            extracted = true;
+            patch = fallback;
+            notedRecommendation = wantsHelp;
+          }
+        }
+      }
+    }
+
     if (skipRequested && !skippedPhases.includes(session.phase)) {
       skippedPhases.push(session.phase);
+    }
+
+    if (
+      userAnswer !== undefined &&
+      isSkippable(session.phase) &&
+      !skipRequested &&
+      !isPhaseSatisfied(session.phase, spec, {
+        skipped: skippedPhases.includes(session.phase),
+        confirmed,
+        patch,
+      })
+    ) {
+      const recommended = recommendPhasePatch(session.phase, spec);
+      if (recommended) {
+        const committed = commitProjectSpecPatch(spec, recommended);
+        if (committed.ok) {
+          spec = committed.spec;
+          extracted = true;
+          patch = recommended;
+          notedRecommendation = true;
+        }
+      }
     }
 
     const phaseSatisfied = isPhaseSatisfied(session.phase, spec, {
       skipped: skipRequested || skippedPhases.includes(session.phase),
       confirmed,
-      patch: extraction?.patch,
+      patch,
     });
 
     let phase: InterviewPhase = session.phase;
@@ -336,11 +424,12 @@ export class InterviewEngine {
       {
         spec,
         skippedPhases,
-        questionText:
-          parsed.question ??
-          (phase === "review"
-            ? "Please confirm this project specification."
-            : undefined),
+        questionText: nextQuestionText(
+          session.phase,
+          phase,
+          parsed.question,
+          notedRecommendation,
+        ),
         extracted,
       },
     );

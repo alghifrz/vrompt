@@ -8,7 +8,7 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
+  --font-sans: var(--font-space-grotesk);
   --font-mono: var(--font-geist-mono);
 }
 
@@ -22,7 +22,41 @@
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
+  font-family: var(--font-space-grotesk), Arial, Helvetica, sans-serif;
+}
+
+html {
+  scroll-behavior: smooth;
+  scroll-padding-top: 7rem;
+}
+
+.landing-display {
+  font-family: var(--font-instrument-serif), "Times New Roman", serif;
+}
+
+.landing-glow {
+  background: radial-gradient(
+    ellipse 70% 55% at 50% 0%,
+    rgba(212, 242, 106, 0.16),
+    transparent 70%
+  );
+}
+
+.landing-marquee {
+  animation: landing-marquee 48s linear infinite;
+}
+
+.landing-marquee-reverse {
+  animation: landing-marquee 56s linear infinite reverse;
+}
+
+@keyframes landing-marquee {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

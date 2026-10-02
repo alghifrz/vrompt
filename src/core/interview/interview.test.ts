@@ -254,7 +254,7 @@ describe("InterviewEngine", () => {
       expect(parsed.question).toBe("What is the goal?");
     });
 
-    it("fails when the structured section is missing", async () => {
+    it("continues when the structured section is missing but a question exists", async () => {
       const provider = new MockLLMProvider({
         response: mockResponse("QUESTION:\nWhat is the project name?"),
       });
@@ -262,13 +262,13 @@ describe("InterviewEngine", () => {
       const session = createInterviewSession({ id: "int-1" });
       const result = await engine.runTurn(session, "FieldKit");
 
-      expect(result.extracted).toBe(false);
-      expect(result.error?.code).toBe(InterviewErrorCode.EXTRACTION_FAILED);
-      expect(result.session.spec.project.name).toBe(INITIAL_PROJECT.name);
-      expect(result.session.phase).toBe("discovery");
+      expect(result.error).toBeUndefined();
+      expect(result.session.spec.project.name).toBe("FieldKit");
+      expect(result.session.phase).toBe("goals");
+      expect(result.question?.text).toBe("What's the main outcome you want first?");
     });
 
-    it("fails on malformed JSON", async () => {
+    it("continues on malformed JSON when a question exists", async () => {
       const provider = new MockLLMProvider({
         response: mockResponse(
           "QUESTION:\nTry again\n<structured>\n{ patch: }\n</structured>",
@@ -280,11 +280,12 @@ describe("InterviewEngine", () => {
         "FieldKit",
       );
 
-      expect(result.extracted).toBe(false);
-      expect(result.error?.code).toBe(InterviewErrorCode.EXTRACTION_FAILED);
+      expect(result.error).toBeUndefined();
+      expect(result.session.phase).toBe("goals");
+      expect(result.question?.text).toBe("What's the main outcome you want first?");
     });
 
-    it("accepts an empty patch without changing the spec", async () => {
+    it("advances after one answer even when the model returns an empty patch", async () => {
       const provider = new MockLLMProvider({
         response: mockResponse(
           structuredResponse("Can you name the product?", { patch: {} }),
@@ -295,11 +296,11 @@ describe("InterviewEngine", () => {
       const result = await engine.runTurn(session, "Still thinking.");
 
       expect(result.extracted).toBe(true);
-      expect(result.session.spec.project.name).toBe(INITIAL_PROJECT.name);
-      expect(result.session.phase).toBe("discovery");
+      expect(result.session.spec.project.name).toBe("Still thinking");
+      expect(result.session.phase).toBe("goals");
     });
 
-    it("rejects an invalid patch and keeps the previous draft", async () => {
+    it("ignores an invalid patch item and keeps the previous draft", async () => {
       const provider = new MockLLMProvider({
         response: mockResponse(
           structuredResponse("What priority?", {
@@ -322,19 +323,21 @@ describe("InterviewEngine", () => {
       const session = createInterviewSession({ id: "int-1" });
       const result = await engine.runTurn(session, "Add a board.");
 
-      expect(result.extracted).toBe(false);
-      expect(result.error?.code).toBe(InterviewErrorCode.PATCH_INVALID);
+      expect(result.extracted).toBe(true);
+      expect(result.error).toBeUndefined();
       expect(result.session.spec.features).toBeUndefined();
+      expect(result.session.phase).toBe("goals");
     });
 
-    it("rejects unknown patch fields", () => {
+    it("strips unknown patch fields and keeps supported facts", () => {
       const parsed = parseInterviewResponse(
         `<structured>${JSON.stringify({
           patch: { project: { name: "FieldKit" }, extra: true },
         })}</structured>`,
       );
 
-      expect(parsed.error?.code).toBe(InterviewErrorCode.PATCH_INVALID);
+      expect(parsed.error).toBeUndefined();
+      expect(parsed.extraction?.patch?.project?.name).toBe("FieldKit");
     });
   });
 
@@ -438,11 +441,9 @@ describe("InterviewEngine", () => {
       const session = createInterviewSession({ id: "int-1" });
       const result = await engine.runTurn(session, "Nobody yet.");
 
-      expect(result.extracted).toBe(false);
-      expect(result.error?.code).toBe(InterviewErrorCode.SPEC_INVALID);
-      expect(result.session.spec.project.targetUsers).toEqual([
-        ...INITIAL_PROJECT.targetUsers,
-      ]);
+      expect(result.error).toBeUndefined();
+      expect(result.session.spec.project.targetUsers).toEqual(["Primary users"]);
+      expect(result.session.phase).toBe("goals");
     });
   });
 
@@ -498,32 +499,74 @@ describe("InterviewEngine", () => {
       expect(session.phase).toBe("architecture");
     });
 
-    it("allows skipping database, API, and other optional phases", async () => {
+    it("recommends beginner defaults when optional technical answers are unknown", async () => {
       const { session } = await runScriptedTurns(
-        ["idea", "goals", "features", "users", "skip", "skip", "skip", "skip", "skip", "skip"],
+        ["idea", "goals", "features", "users", "gatau", "gatau", "gatau", "gatau", "gatau", "gatau"],
+        [
+          structuredResponse("Goals?", { patch: discoveryPatch }),
+          structuredResponse("Features?", { patch: goalsPatch }),
+          structuredResponse("Users?", { patch: featuresPatch }),
+          structuredResponse("Stack?", { patch: usersPatch }),
+          structuredResponse("I recommend Next.js because it stays one app. Architecture?", {
+            patch: {},
+          }),
+          structuredResponse("Database?", { patch: {} }),
+          structuredResponse("API?", { patch: {} }),
+          structuredResponse("Security?", { patch: {} }),
+          structuredResponse("Rules?", { patch: {} }),
+          structuredResponse("Please confirm this project specification.", {
+            patch: {},
+          }),
+        ],
+      );
+
+      expect(session.spec.stack?.frontend).toBe("Next.js");
+      expect(session.spec.database?.entities?.length).toBeGreaterThan(0);
+      expect(session.spec.api?.endpoints.length).toBeGreaterThan(0);
+      expect(session.completed).toBe(false);
+      expect(session.phase).toBe("review");
+    });
+
+    it("treats agreement as accepting the recommendation and moves on", async () => {
+      const session = {
+        ...createInterviewSession({ id: "int-1" }),
+        phase: "security" as const,
+      };
+      const provider = new MockLLMProvider({
+        response: mockResponse(
+          structuredResponse(
+            "For authentication, would you like Firebase Auth or Supabase Auth? Recommended: hosted auth.",
+            { patch: { security: {} } },
+          ),
+        ),
+      });
+      const result = await new InterviewEngine(provider).runTurn(
+        session,
+        "iiya setuju",
+      );
+
+      expect(result.session.phase).toBe("ai_rules");
+      expect(result.session.spec.security?.authentication?.[0]).toMatch(/hosted auth/i);
+      expect(result.question?.text).toContain("hosted auth");
+      expect(result.question?.text).toContain("coding agent");
+      expect(result.question?.text).not.toMatch(/Firebase Auth/i);
+    });
+
+    it("skips a technical phase only when the user says it is not needed", async () => {
+      const { session } = await runScriptedTurns(
+        ["idea", "goals", "features", "users", "tidak perlu"],
         [
           structuredResponse("Goals?", { patch: discoveryPatch }),
           structuredResponse("Features?", { patch: goalsPatch }),
           structuredResponse("Users?", { patch: featuresPatch }),
           structuredResponse("Stack?", { patch: usersPatch }),
           structuredResponse("Architecture?", { skip: true }),
-          structuredResponse("Database?", { skip: true }),
-          structuredResponse("API?", { skip: true }),
-          structuredResponse("Security?", { skip: true }),
-          structuredResponse("Rules?", { skip: true }),
-          structuredResponse("Please confirm this project specification.", {
-            skip: true,
-          }),
         ],
       );
 
-      expect(session.skippedPhases).toEqual(
-        expect.arrayContaining(["database", "api", "security", "ai_rules"]),
-      );
-      expect(session.spec.database).toBeUndefined();
-      expect(session.spec.api).toBeUndefined();
-      expect(session.completed).toBe(false);
-      expect(session.phase).toBe("review");
+      expect(session.skippedPhases).toContain("stack");
+      expect(session.spec.stack).toBeUndefined();
+      expect(session.phase).toBe("architecture");
     });
 
     it("treats AI rules as optional", async () => {
@@ -545,7 +588,7 @@ describe("InterviewEngine", () => {
         ],
       );
 
-      expect(session.spec.aiRules).toEqual([]);
+      expect(session.spec.aiRules?.[0]?.id).toBe("rule-keep-simple");
       expect(session.phase).toBe("review");
     });
   });

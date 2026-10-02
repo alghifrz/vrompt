@@ -3,7 +3,7 @@ import {
   STATUS_LABELS,
   type ReviewViewModel,
 } from "../../lib/review/view-model";
-import { primaryButtonClass } from "./form-controls";
+import { ghostButtonClass, primaryButtonClass } from "./form-controls";
 
 export function ReviewHeader({
   view,
@@ -20,39 +20,59 @@ export function ReviewHeader({
   valid: boolean;
   onSave: () => void;
 }) {
+  const status = !valid
+    ? "Needs attention"
+    : view.spec.project.status === "ready"
+      ? "Ready for generation"
+      : STATUS_LABELS[view.spec.project.status];
+
   return (
-    <header className="border-b border-zinc-200 px-4 py-5 dark:border-zinc-800 sm:px-6">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div className="min-w-0 space-y-2">
+    <header className="sticky top-0 z-20 border-b border-white/8 bg-[#0c0c0c] px-4 py-4 sm:px-6">
+      <div className="mx-auto flex w-full max-w-4xl flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0 space-y-3">
           <Link
             href={`/interview/${view.projectId}`}
-            className="text-sm text-zinc-600 underline-offset-4 hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-zinc-900 dark:text-zinc-400 dark:focus-visible:outline-zinc-100"
+            className="inline-flex items-center gap-1.5 text-sm text-white/45 transition-colors hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#d4f26a]"
           >
+            <span aria-hidden="true">←</span>
             Back to interview
           </Link>
-          <h1 className="text-2xl font-semibold tracking-tight">
-            Project Specification
-          </h1>
-          <p className="max-w-2xl text-sm leading-6 text-zinc-600 dark:text-zinc-400">
-            Review everything before generating your AI coding configuration.
-          </p>
+          <div>
+            <p className="text-[11px] uppercase tracking-[0.18em] text-white/35">
+              Step 2 of 3 · Review
+            </p>
+            <h1 className="mt-1 text-2xl font-semibold tracking-tight">
+              Project Specification
+            </h1>
+            <p className="mt-2 max-w-xl text-sm leading-6 text-white/50">
+              Fix anything unclear, then continue. Generation writes the ZIP
+              from this spec.
+            </p>
+          </div>
         </div>
-        <div className="flex flex-col items-stretch gap-2 sm:items-end">
-          <p className="text-sm font-medium" role="status">
-            {!valid
-              ? "Needs attention"
-              : view.spec.project.status === "ready"
-                ? "Ready for generation"
-                : STATUS_LABELS[view.spec.project.status]}
-          </p>
-          <p className="text-xs text-zinc-500" role="status">
-            {dirty ? "Unsaved changes" : "All changes saved"}
-          </p>
+        <div className="flex shrink-0 flex-col items-stretch gap-3 sm:items-end">
+          <div className="flex flex-wrap items-center gap-2">
+            <span
+              role="status"
+              className={`rounded-full px-2.5 py-1 text-xs font-medium ${
+                !valid
+                  ? "border border-rose-300/30 bg-rose-400/10 text-rose-200"
+                  : view.spec.project.status === "ready"
+                    ? "border border-[#d4f26a]/30 bg-[#d4f26a]/10 text-[#d4f26a]"
+                    : "border border-white/10 bg-white/5 text-white/70"
+              }`}
+            >
+              {status}
+            </span>
+            <span className="text-xs text-white/40" role="status">
+              {dirty ? "Unsaved changes" : "All changes saved"}
+            </span>
+          </div>
           <button
             type="button"
             disabled={saving || !dirty}
             onClick={onSave}
-            className={primaryButtonClass}
+            className={dirty ? primaryButtonClass : ghostButtonClass}
           >
             {saveLabel}
           </button>

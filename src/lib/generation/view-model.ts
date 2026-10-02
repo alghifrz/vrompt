@@ -1,11 +1,15 @@
 import type { ConsistencyDiagnostic } from "../../core/consistency/diagnostics";
+import type { ErdView, PrdView } from "../../core/generation/docs";
+import { buildGenerationJobs } from "../../core/generation/jobs";
+import type { GenerationJob } from "../../core/generation/jobs";
 import { GENERATION_TARGET_DEFINITIONS } from "../../core/generation/targets";
 import type {
+  GeneratedFile,
   GeneratedTarget,
   GenerationResult,
   GenerationTarget,
 } from "../../core/generation/types";
-import type { ProjectStatus } from "../../core/schema/project-spec";
+import type { ProjectSpec, ProjectStatus } from "../../core/schema/project-spec";
 
 export interface GenerationCheck {
   readonly id: string;
@@ -25,6 +29,7 @@ export interface GenerationPageView {
   readonly projectName: string;
   readonly status: ProjectStatus;
   readonly ready: boolean;
+  readonly jobs: readonly GenerationJob[];
 }
 
 export interface GenerationResultView {
@@ -34,6 +39,10 @@ export interface GenerationResultView {
   readonly targets: readonly GeneratedTarget[];
   readonly diagnostics: readonly SafeGenerationDiagnostic[];
   readonly checks: readonly GenerationCheck[];
+  readonly jobs: readonly GenerationJob[];
+  readonly docs: readonly GeneratedFile[];
+  readonly prd?: PrdView;
+  readonly erd?: ErdView;
 }
 
 export interface GenerationViewError {
@@ -46,12 +55,17 @@ export function toGenerationPageView(input: {
   projectId: string;
   projectName: string;
   status: ProjectStatus;
+  spec?: ProjectSpec;
 }): GenerationPageView {
   return {
     projectId: input.projectId,
     projectName: input.projectName,
     status: input.status,
     ready: input.status === "ready",
+    jobs:
+      input.status === "ready" && input.spec
+        ? buildGenerationJobs(input.spec)
+        : [],
   };
 }
 
@@ -67,6 +81,10 @@ export function toGenerationResultView(input: {
     targets: input.result.targets,
     diagnostics: input.result.diagnostics.map(toSafeDiagnostic),
     checks: buildGenerationChecks(input.result.diagnostics),
+    jobs: input.result.jobs ?? [],
+    docs: input.result.docFiles ?? [],
+    prd: input.result.prd,
+    erd: input.result.erd,
   };
 }
 

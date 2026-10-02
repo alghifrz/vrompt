@@ -197,4 +197,34 @@ describe("review flow", () => {
       "attacker",
     );
   });
+
+  it("rewrites raw chat wording when review is opened", async () => {
+    const { flow, projects, store } = review();
+    const raw: ProjectSpec = {
+      project: {
+        name: "gw punya warung, jadi pencatatannya kacau banget",
+        description: "gw punya warung, jadi pencatatannya kacau banget",
+        problem: "gw punya warung, jadi pencatatannya kacau banget",
+        targetUsers: ["Primary users"],
+        type: "web application",
+        status: "draft",
+      },
+    };
+    const project = await projects.createProject({ ownerId: "user_a", spec: raw });
+
+    const result = await flow.load(project.id);
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      return;
+    }
+
+    expect(result.view.spec.project.name).not.toMatch(/\bgw\b/i);
+    expect(result.view.spec.project.description).not.toBe(raw.project.description);
+    expect(result.view.spec.project.problem).not.toBe(
+      result.view.spec.project.description,
+    );
+    expect(store.projects.get(project.id)?.spec.project.name).toBe(
+      result.view.spec.project.name,
+    );
+  });
 });

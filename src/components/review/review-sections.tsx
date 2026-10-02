@@ -17,11 +17,16 @@ import {
   type ReviewFieldError,
 } from "../../lib/review/view-model";
 import {
+  ArrowDownIcon,
+  ArrowUpIcon,
   ghostButtonClass,
+  IconButton,
+  itemCardClass,
   SelectField,
   StringList,
   TextArea,
   TextInput,
+  TrashIcon,
 } from "./form-controls";
 import { ReviewSection } from "./review-section";
 
@@ -173,7 +178,7 @@ function GoalsSection({ spec, disabled, errors, onChange }: SectionProps) {
     <ReviewSection title="Goals" defaultOpen>
       <div className="space-y-4">
         {spec.goals.primary.map((goal, index) => (
-          <div key={goal.id} className="space-y-3 rounded-md border border-zinc-200 p-3 dark:border-zinc-800">
+          <div key={goal.id} className={itemCardClass}>
             <TextArea
               id={`goal-${goal.id}`}
               label={`Primary goal ${String(index + 1)}`}
@@ -285,7 +290,7 @@ function FeaturesSection({ spec, disabled, errors, onChange }: SectionProps) {
   return (
     <ReviewSection title="Features" defaultOpen>
       {spec.features.map((feature, index) => (
-        <article key={feature.id} className="space-y-3 rounded-md border border-zinc-200 p-3 dark:border-zinc-800">
+        <article key={feature.id} className={itemCardClass}>
           <h3 className="text-sm font-medium">Feature {String(index + 1)}</h3>
           <TextInput
             id={`${feature.id}-name`}
@@ -412,7 +417,7 @@ function UsersSection({ spec, disabled, errors, onChange }: SectionProps) {
   return (
     <ReviewSection title="Users">
       {spec.users.map((user, index) => (
-        <article key={user.id} className="space-y-3 rounded-md border border-zinc-200 p-3 dark:border-zinc-800">
+        <article key={user.id} className={itemCardClass}>
           <h3 className="text-sm font-medium">User {String(index + 1)}</h3>
           <TextInput
             id={`${user.id}-name`}
@@ -605,7 +610,7 @@ function ArchitectureSection({ spec, disabled, errors, onChange }: SectionProps)
         }
       />
       {(architecture.components ?? []).map((component, index) => (
-        <article key={component.id} className="space-y-3 rounded-md border border-zinc-200 p-3 dark:border-zinc-800">
+        <article key={component.id} className={itemCardClass}>
           <TextInput
             id={`${component.id}-name`}
             label={`Component ${String(index + 1)} name`}
@@ -693,7 +698,7 @@ function ArchitectureSection({ spec, disabled, errors, onChange }: SectionProps)
         Add component
       </button>
       {(architecture.externalServices ?? []).map((service, index) => (
-        <article key={service.id} className="space-y-3 rounded-md border border-zinc-200 p-3 dark:border-zinc-800">
+        <article key={service.id} className={itemCardClass}>
           <TextInput
             id={`${service.id}-name`}
             label={`External service ${String(index + 1)} name`}
@@ -811,7 +816,7 @@ function DatabaseSection({ spec, disabled, onChange }: SectionProps) {
   return (
     <ReviewSection title="Database">
       {(database.entities ?? []).map((entity, index) => (
-        <article key={entity.id} className="space-y-3 rounded-md border border-zinc-200 p-3 dark:border-zinc-800">
+        <article key={entity.id} className={itemCardClass}>
           <TextInput
             id={`${entity.id}-name`}
             label={`Entity ${String(index + 1)} name`}
@@ -887,7 +892,7 @@ function DatabaseSection({ spec, disabled, onChange }: SectionProps) {
         Add entity
       </button>
       {(database.relationships ?? []).map((relationship, index) => (
-        <article key={`${relationship.from}-${relationship.to}-${String(index)}`} className="space-y-3 rounded-md border border-zinc-200 p-3 dark:border-zinc-800">
+        <article key={`${relationship.from}-${relationship.to}-${String(index)}`} className={itemCardClass}>
           <p className="text-sm font-medium">Relationship {String(index + 1)}</p>
           <TextInput
             id={`rel-${String(index)}-from`}
@@ -1036,7 +1041,7 @@ function ApiSection({ spec, disabled, errors, onChange }: SectionProps) {
   return (
     <ReviewSection title="API">
       {spec.api.endpoints.map((endpoint, index) => (
-        <article key={`${endpoint.method}-${endpoint.path}-${String(index)}`} className="space-y-3 rounded-md border border-zinc-200 p-3 dark:border-zinc-800">
+        <article key={`${endpoint.method}-${endpoint.path}-${String(index)}`} className={itemCardClass}>
           <div className="grid gap-4 sm:grid-cols-2">
             <SelectField
               id={`endpoint-${String(index)}-method`}
@@ -1279,7 +1284,7 @@ function AiRulesSection({ spec, disabled, errors, onChange }: SectionProps) {
   return (
     <ReviewSection title="AI Rules">
       {spec.aiRules.map((rule, index) => (
-        <article key={rule.id} className="space-y-3 rounded-md border border-zinc-200 p-3 dark:border-zinc-800">
+        <article key={rule.id} className={itemCardClass}>
           <TextInput
             id={`${rule.id}-title`}
             label={`Rule ${String(index + 1)} title`}
@@ -1414,8 +1419,8 @@ function EmptySection({
   onAdd: () => void;
 }) {
   return (
-    <div className="space-y-3">
-      <p className="text-sm text-zinc-600 dark:text-zinc-400">{text}</p>
+    <div className="space-y-3 rounded-xl border border-dashed border-white/10 bg-white/2 px-4 py-5">
+      <p className="text-sm leading-6 text-white/50">{text}</p>
       <button type="button" disabled={disabled} className={ghostButtonClass} onClick={onAdd}>
         {action}
       </button>
@@ -1439,34 +1444,28 @@ function ItemControls({
   onDelete: () => void;
 }) {
   return (
-    <div className="flex flex-wrap gap-2">
-      <button
-        type="button"
+    <div className="flex flex-wrap gap-1.5">
+      <IconButton
+        label={`Move ${label} up`}
         disabled={disabled || index === 0}
-        className={ghostButtonClass}
-        aria-label={`Move ${label} up`}
         onClick={() => onMove(-1)}
       >
-        Up
-      </button>
-      <button
-        type="button"
+        <ArrowUpIcon />
+      </IconButton>
+      <IconButton
+        label={`Move ${label} down`}
         disabled={disabled || last}
-        className={ghostButtonClass}
-        aria-label={`Move ${label} down`}
         onClick={() => onMove(1)}
       >
-        Down
-      </button>
-      <button
-        type="button"
+        <ArrowDownIcon />
+      </IconButton>
+      <IconButton
+        label={`Delete ${label}`}
         disabled={disabled}
-        className={ghostButtonClass}
-        aria-label={`Delete ${label}`}
         onClick={onDelete}
       >
-        Delete
-      </button>
+        <TrashIcon />
+      </IconButton>
     </div>
   );
 }

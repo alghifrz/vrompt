@@ -1,3 +1,5 @@
+import { applySpecLanguagePass } from "../../core/interview/rewrite";
+import type { LLMProvider } from "../../core/llm/types";
 import { ProjectSpecSchema } from "../../core/schema/project-spec";
 import { toSafeReviewError } from "../../lib/review/safe-error";
 import {
@@ -17,6 +19,7 @@ export type ReviewFlowResult =
 export function createReviewFlow(deps: {
   requireAuth: RequireAuth;
   projects: ProjectRepository;
+  createProvider?: () => LLMProvider;
 }) {
   return {
     async load(projectId: string): Promise<ReviewFlowResult> {
@@ -44,11 +47,29 @@ export function createReviewFlow(deps: {
           };
         }
 
+        let spec = parsed.spec;
+        try {
+          const rewritten = await applySpecLanguagePass(
+            spec,
+            deps.createProvider?.(),
+          );
+          if (JSON.stringify(rewritten) !== JSON.stringify(spec)) {
+            await deps.projects.updateProject({
+              projectId: project.id,
+              ownerId: userId,
+              spec: rewritten,
+            });
+            spec = rewritten;
+          }
+        } catch {
+          // Show the stored spec if rewrite cannot run.
+        }
+
         return {
           ok: true,
           view: toReviewViewModel({
             projectId: project.id,
-            spec: parsed.spec,
+            spec,
           }),
         };
       } catch (error) {

@@ -143,6 +143,10 @@ describe("generation", () => {
     expect(result.specId).toBe("proj-1");
     expect(result.generatedAt).toBe("2026-01-01T00:00:00.000Z");
     expect(result.targets).toHaveLength(1);
+    expect(result.docFiles?.map((file) => file.path)).toEqual(["PRD.md", "ERD.md"]);
+    expect(result.docFiles?.[0]?.content).toContain("Product Requirements Document");
+    expect(result.prd?.name).toBe("FieldKit");
+    expect(result.erd?.entities.length).toBeGreaterThan(0);
   });
 
   it("rejects an unknown target", () => {

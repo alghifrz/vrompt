@@ -65,6 +65,9 @@ Local development can run without PostgreSQL. The process then uses an in-memory
 | `DATABASE_URL` | server | optional | required |
 | `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` | public | required to start projects | required |
 | `CLERK_SECRET_KEY` | server | required to start projects | required |
+| `DASHSCOPE_API_KEY` or `LLM_API_KEY` | server | optional (mock fallback) | required |
+| `LLM_BASE_URL` | server | DashScope intl default | optional |
+| `LLM_MODEL` | server | `qwen-plus` default | optional |
 
 Optional Clerk routing values are documented in `.env.example`. Do not commit `.env`, `.env.local`, or `.env.*.local`.
 
@@ -84,8 +87,9 @@ Interview session and project spec writes are sequential, not a shared database 
 
 1. Create a Clerk application.
 2. Put the publishable and secret keys in `.env.local`.
-3. Set the Clerk sign-in URL to `/sign-in`.
-4. After sign-in, send users to `/start`.
+3. Set the Clerk sign-in URL to `/sign-in` and the sign-up URL to `/sign-up`.
+4. After sign-in or sign-up, send users to `/start`.
+5. Enable sign-ups in the Clerk dashboard if the Sign up link is missing.
 
 Without Clerk keys the public pages still render. The sign-in page explains that authentication is not configured. It never prints secret names or values.
 
@@ -155,7 +159,7 @@ There is no distributed rate limiter. Generation is local and deterministic. ZIP
 - No team collaboration or sharing
 - Interview session and project spec persistence is sequential
 - Signed-in manual testing requires Clerk credentials
-- The interviewer is a development mock, not a hosted LLM vendor
+- The interviewer uses DashScope/Qwen or another OpenAI-compatible endpoint when a key is set. Local/test without a key still uses the development mock.
 
 ## Core boundaries
 

@@ -9,6 +9,8 @@ import {
   createDefaultGenerationRegistry,
   type GenerationRegistry,
 } from "./registry";
+import { buildErdView, buildPrdView, renderDocFiles } from "./docs";
+import { buildJobPack } from "./jobs";
 import {
   compareGenerationTargets,
   isGenerationTarget,
@@ -119,11 +121,18 @@ export function generateForTargets(
     );
   }
 
+  const pack = buildJobPack(parsed);
+
   return {
     specId: options.specId ?? parsed.project.name,
     generatedAt: (options.now ?? (() => new Date()))().toISOString(),
     targets: generated,
     diagnostics: report.diagnostics,
+    jobs: pack.jobs,
+    jobFiles: pack.files,
+    docFiles: renderDocFiles(parsed),
+    prd: buildPrdView(parsed),
+    erd: buildErdView(parsed),
   };
 }
 

@@ -75,10 +75,20 @@ describe("generation ZIP", () => {
     const zip = await JSZip.loadAsync(bytes);
     const names = Object.keys(zip.files).filter((name) => !zip.files[name]?.dir);
 
-    expect(names.every((name) => name.startsWith("vrompt-export/cursor/"))).toBe(
+    expect(
+      names.every(
+        (name) =>
+          name.startsWith("vrompt-export/cursor/") ||
+          name.startsWith("vrompt-export/docs/") ||
+          name.startsWith("vrompt-export/jobs/"),
+      ),
+    ).toBe(true);
+    expect(names.some((name) => name.includes(".cursor/rules/"))).toBe(true);
+    expect(names.some((name) => name === "vrompt-export/jobs/README.md")).toBe(
       true,
     );
-    expect(names.some((name) => name.includes(".cursor/rules/"))).toBe(true);
+    expect(names.some((name) => name === "vrompt-export/docs/PRD.md")).toBe(true);
+    expect(names.some((name) => name === "vrompt-export/docs/ERD.md")).toBe(true);
   });
 
   it("keeps multiple targets in separate folders", async () => {

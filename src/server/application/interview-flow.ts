@@ -1,4 +1,5 @@
 import { InterviewEngine, createInitialProjectSpec, createInterviewSession } from "../../core/interview/engine";
+import { applySpecLanguagePass } from "../../core/interview/rewrite";
 import type { LLMProvider } from "../../core/llm/types";
 import {
   toInterviewViewModel,
@@ -68,24 +69,32 @@ export function createInterviewFlow(deps: {
   return {
     async startProject(): Promise<InterviewFlowResult> {
       const { userId } = await deps.requireAuth();
-      const spec = createInitialProjectSpec();
-      const project = await deps.projects.createProject({
-        ownerId: userId,
-        spec,
-      });
-      const draft = createInterviewSession({ id: ids.next() });
-      const opened = await new InterviewEngine(deps.createProvider()).start(draft);
-      await persistTurn(userId, project.id, opened.session.id, opened.session, false);
+      try {
+        const spec = createInitialProjectSpec();
+        const project = await deps.projects.createProject({
+          ownerId: userId,
+          spec,
+        });
+        const draft = createInterviewSession({ id: ids.next() });
+        const opened = await new InterviewEngine(deps.createProvider()).start(draft);
+        await persistTurn(userId, project.id, opened.session.id, opened.session, false);
 
-      return {
-        ok: true,
-        view: toInterviewViewModel({
-          projectId: project.id,
-          projectName: opened.session.spec.project.name,
-          session: opened.session,
-          error: opened.error ? toSafeInterviewError(opened.error) : undefined,
-        }),
-      };
+        return {
+          ok: true,
+          view: toInterviewViewModel({
+            projectId: project.id,
+            projectName: opened.session.spec.project.name,
+            session: opened.session,
+            error: opened.error ? toSafeInterviewError(opened.error) : undefined,
+          }),
+        };
+      } catch (error) {
+        if (error instanceof AuthError) {
+          throw error;
+        }
+
+        return { ok: false, error: toSafeInterviewError(error) };
+      }
     },
 
     async loadInterview(projectId: string): Promise<InterviewFlowResult> {
@@ -168,11 +177,24 @@ export function createInterviewFlow(deps: {
         input.answer,
       );
 
+      let session = result.session;
+      try {
+        const spec = await applySpecLanguagePass(
+          session.spec,
+          deps.createProvider(),
+        );
+        if (spec !== session.spec) {
+          session = { ...session, spec };
+        }
+      } catch {
+        // Keep the extracted draft if rewrite fails.
+      }
+
       await persistTurn(
         userId,
         project.id,
         record.id,
-        result.session,
+        session,
         true,
       );
 
@@ -180,8 +202,8 @@ export function createInterviewFlow(deps: {
         ok: true,
         view: toInterviewViewModel({
           projectId: project.id,
-          projectName: result.session.spec.project.name,
-          session: result.session,
+          projectName: session.spec.project.name,
+          session,
           error: result.error ? toSafeInterviewError(result.error) : undefined,
         }),
       };

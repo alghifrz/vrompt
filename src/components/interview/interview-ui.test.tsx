@@ -157,6 +157,8 @@ describe("interview UI", () => {
 
     expect(submitAnswer).toHaveBeenCalledTimes(1);
     expect(screen.getByLabelText("Interview answer")).toBeDisabled();
+    expect(screen.getByLabelText("Interview answer")).toHaveValue("");
+    expect(screen.getByText("The visit board")).toBeInTheDocument();
     expect(screen.getByRole("status")).toHaveTextContent("Interviewer is thinking");
 
     resolveSubmit({

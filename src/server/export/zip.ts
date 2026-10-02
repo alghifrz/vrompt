@@ -96,6 +96,32 @@ export async function createGenerationZip(
     }
   }
 
+  for (const file of result.docFiles ?? []) {
+    const path = zipEntryPath("docs", file.path);
+    if (seen.has(path)) {
+      throw new GenerationError(
+        GenerationErrorCode.EXPORT_INVALID_PATH,
+        `Duplicate archive path "${path}".`,
+      );
+    }
+
+    seen.add(path);
+    entries.push({ path, content: file.content });
+  }
+
+  for (const file of result.jobFiles ?? []) {
+    const path = zipEntryPath("jobs", file.path);
+    if (seen.has(path)) {
+      throw new GenerationError(
+        GenerationErrorCode.EXPORT_INVALID_PATH,
+        `Duplicate archive path "${path}".`,
+      );
+    }
+
+    seen.add(path);
+    entries.push({ path, content: file.content });
+  }
+
   entries.sort((left, right) => left.path.localeCompare(right.path));
 
   try {

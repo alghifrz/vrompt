@@ -27,12 +27,86 @@ const readyPage: GenerationPageView = {
   projectName: "FieldKit",
   status: "ready",
   ready: true,
+  jobs: [
+    {
+      id: "job-bootstrap",
+      step: 1,
+      title: "Bootstrap the repo",
+      summary: "Create the first web application for FieldKit.",
+      prompt: "Implement this job for FieldKit.\n\nJob — Bootstrap the repo",
+    },
+    {
+      id: "job-board",
+      step: 2,
+      title: "Visit board",
+      summary: "Show today's visits.",
+      prompt: "Implement this job for FieldKit.\n\nJob — Visit board",
+    },
+  ],
 };
 
 const generated: GenerationResultView = {
   projectId: "proj-1",
   projectName: "FieldKit",
   selectedTargets: ["agents-md", "cursor"],
+  jobs: readyPage.jobs,
+  docs: [
+    { path: "PRD.md", content: "# Product Requirements Document\n\nFieldKit" },
+    { path: "ERD.md", content: "# Entity Relationship Diagram\n\nerDiagram" },
+  ],
+  prd: {
+    name: "FieldKit",
+    type: "web application",
+    problem: "Visit notes are scattered.",
+    description: "A field toolkit.",
+    goals: ["Assign visits without conflicts."],
+    successCriteria: ["A dispatcher can assign a visit quickly."],
+    users: [
+      {
+        name: "Dispatcher",
+        description: "Coordinates schedules.",
+        goals: ["Assign visits"],
+        permissions: ["manage-visits"],
+      },
+    ],
+    features: [
+      {
+        name: "Visit board",
+        description: "Show today's visits.",
+        priority: "must",
+        status: "planned",
+        acceptance: ["The board lists today's visits."],
+      },
+    ],
+    stack: ["Next.js"],
+    components: [],
+    endpoints: [],
+  },
+  erd: {
+    inferred: false,
+    notes: [],
+    entities: [
+      {
+        id: "Visit",
+        name: "Visit",
+        description: "A scheduled visit.",
+        fields: [
+          { type: "string", name: "id", key: "PK" },
+          { type: "string", name: "title" },
+        ],
+      },
+      {
+        id: "Note",
+        name: "Note",
+        description: "A visit note.",
+        fields: [
+          { type: "string", name: "id", key: "PK" },
+          { type: "string", name: "visitId", key: "FK" },
+        ],
+      },
+    ],
+    links: [{ from: "Visit", to: "Note", kind: "one-to-many", label: "has notes" }],
+  },
   targets: [
     {
       target: "agents-md",
@@ -68,25 +142,31 @@ describe("generation UI", () => {
     render(<GenerationEditor page={readyPage} generateProject={vi.fn()} />);
 
     expect(screen.getByRole("heading", { name: "Generation" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "AI jobs" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Visit board" })).toBeInTheDocument();
     expect(screen.getByText("AGENTS.md")).toBeInTheDocument();
     expect(screen.getByText("Cursor")).toBeInTheDocument();
     expect(screen.getByText("Qoder")).toBeInTheDocument();
     expect(screen.getByText("Claude Code")).toBeInTheDocument();
-    expect(screen.getByText("0 targets selected")).toBeInTheDocument();
+    expect(screen.getByText("1 target selected")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Generate" })).toBeEnabled();
   });
 
-  it("disables generate when nothing is selected", () => {
-    render(<GenerationEditor page={readyPage} generateProject={vi.fn()} />);
-
-    expect(screen.getByRole("button", { name: "Generate" })).toBeDisabled();
-  });
-
-  it("selects targets and enables generate", async () => {
+  it("disables generate when nothing is selected", async () => {
     const user = userEvent.setup();
     render(<GenerationEditor page={readyPage} generateProject={vi.fn()} />);
 
     await user.click(screen.getByRole("checkbox", { name: /Cursor/i }));
-    expect(screen.getByText("1 target selected")).toBeInTheDocument();
+    expect(screen.getByText("0 targets selected")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Generate" })).toBeDisabled();
+  });
+
+  it("selects another target", async () => {
+    const user = userEvent.setup();
+    render(<GenerationEditor page={readyPage} generateProject={vi.fn()} />);
+
+    await user.click(screen.getByRole("checkbox", { name: /Qoder/i }));
+    expect(screen.getByText("2 targets selected")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Generate" })).toBeEnabled();
   });
 
@@ -100,7 +180,6 @@ describe("generation UI", () => {
       <GenerationEditor page={readyPage} generateProject={generateProject} />,
     );
 
-    await user.click(screen.getByRole("checkbox", { name: /Cursor/i }));
     await user.click(screen.getByRole("button", { name: "Generate" }));
 
     expect(screen.getByRole("button", { name: "Generating..." })).toBeDisabled();
@@ -117,13 +196,15 @@ describe("generation UI", () => {
       <GenerationEditor page={readyPage} generateProject={generateProject} />,
     );
 
-    await user.click(screen.getByRole("checkbox", { name: /AGENTS.md/i }));
     await user.click(screen.getByRole("button", { name: "Generate" }));
 
     expect(await screen.findByText("Generated files")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "PRD.md" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "ERD.md" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "AGENTS.md" })).toBeInTheDocument();
     expect(screen.getByText(".cursor/rules/00-project-overview.mdc")).toBeInTheDocument();
-    expect(screen.getByLabelText("Preview of AGENTS.md")).toHaveTextContent("FieldKit");
+    expect(screen.getByLabelText("Preview of PRD.md")).toHaveTextContent("FieldKit");
+    expect(screen.getByRole("heading", { name: "Use this export" })).toBeInTheDocument();
     expect(screen.getByText("✓ ProjectSpec valid")).toBeInTheDocument();
     expect(screen.getByText("Warnings")).toBeInTheDocument();
     expect(screen.getByText("AGENTS.md has no native priority.")).toBeInTheDocument();
@@ -131,6 +212,33 @@ describe("generation UI", () => {
       "href",
       "/api/projects/proj-1/export?targets=agents-md,cursor",
     );
+  });
+
+  it("shows a visual PRD and ERD preview", async () => {
+    const user = userEvent.setup();
+    render(
+      <GenerationEditor
+        page={readyPage}
+        generateProject={vi.fn<GenerateProject>(async () => ({
+          ok: true,
+          view: generated,
+        }))}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Generate" }));
+    await user.click(screen.getByRole("button", { name: "PRD.md" }));
+
+    const prdPreview = screen.getByLabelText("Preview of PRD.md");
+    expect(prdPreview).toHaveTextContent("Product");
+    expect(prdPreview).toHaveTextContent("Visit notes are scattered.");
+    expect(prdPreview).toHaveTextContent("Dispatcher");
+    expect(prdPreview).toHaveTextContent("Visit board");
+
+    await user.click(screen.getByRole("button", { name: "ERD.md" }));
+    expect(screen.getByLabelText("Entity relationship diagram")).toBeInTheDocument();
+    expect(screen.getByLabelText("Preview of ERD.md")).toHaveTextContent("Visit");
+    expect(screen.getByLabelText("Preview of ERD.md")).toHaveTextContent("one-to-many");
   });
 
   it("lets the user open another file preview", async () => {
@@ -145,7 +253,6 @@ describe("generation UI", () => {
       />,
     );
 
-    await user.click(screen.getByRole("checkbox", { name: /Cursor/i }));
     await user.click(screen.getByRole("button", { name: "Generate" }));
     await user.click(screen.getByRole("button", { name: ".cursor/rules/00-project-overview.mdc" }));
 

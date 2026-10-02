@@ -6,7 +6,7 @@ const SRC_ROOT = path.resolve(import.meta.dirname, "..");
 const FORBIDDEN = [
   /from\s+["']server-only["']/,
   /from\s+["'][^"']*\/server\/(?:db|repositories|runtime|auth|export)[^"']*["']/,
-  /process\.env\.(?:DATABASE_URL|CLERK_SECRET_KEY)/,
+  /process\.env\.(?:DATABASE_URL|CLERK_SECRET_KEY|DASHSCOPE_API_KEY|LLM_API_KEY|OPENAI_API_KEY)/,
 ];
 
 async function walk(dir: string): Promise<string[]> {

@@ -54,7 +54,7 @@ export function isDiscoveryComplete(spec: ProjectSpec): boolean {
   );
 }
 
-function hasStack(spec: ProjectSpec): boolean {
+export function hasStack(spec: ProjectSpec): boolean {
   const stack = spec.stack;
   if (!stack) {
     return false;
@@ -70,7 +70,7 @@ function hasStack(spec: ProjectSpec): boolean {
   );
 }
 
-function hasArchitecture(spec: ProjectSpec): boolean {
+export function hasArchitecture(spec: ProjectSpec): boolean {
   const architecture = spec.architecture;
   if (!architecture) {
     return false;
@@ -85,7 +85,7 @@ function hasArchitecture(spec: ProjectSpec): boolean {
   );
 }
 
-function hasDatabase(spec: ProjectSpec): boolean {
+export function hasDatabase(spec: ProjectSpec): boolean {
   const database = spec.database;
   if (!database) {
     return false;
@@ -98,7 +98,7 @@ function hasDatabase(spec: ProjectSpec): boolean {
   );
 }
 
-function hasSecurity(spec: ProjectSpec): boolean {
+export function hasSecurity(spec: ProjectSpec): boolean {
   const security = spec.security;
   if (!security) {
     return false;
@@ -153,9 +153,13 @@ export function isPhaseSatisfied(
 
 export function isUserConfirmation(answer: string): boolean {
   const normalized = answer.trim().toLowerCase();
-  return /^(yes|y|ok|okay|confirm|confirmed|approve|approved|done|looks good)$/i.test(
-    normalized,
-  ) || normalized.includes("i confirm");
+  return (
+    /^(yes|y|ok|okay|oke|iya|ya|boleh|sip|lanjut|lanjutkan|confirm|confirmed|approve|approved|done|looks good)$/i.test(
+      normalized,
+    ) ||
+    normalized.includes("i confirm") ||
+    normalized.includes("sudah benar")
+  );
 }
 
 export function missingInformation(
@@ -174,17 +178,29 @@ export function missingInformation(
     case "users":
       return spec.users?.length ? [] : ["at least one user type"];
     case "stack":
-      return hasStack(spec) ? [] : ["stack details, or skip if none"];
+      return hasStack(spec)
+        ? []
+        : ["stack details, or a beginner recommendation if they do not know"];
     case "architecture":
-      return hasArchitecture(spec) ? [] : ["architecture details, or skip if none"];
+      return hasArchitecture(spec)
+        ? []
+        : ["architecture details, or a simple recommended shape if they do not know"];
     case "database":
-      return hasDatabase(spec) ? [] : ["database needs, or skip if none"];
+      return hasDatabase(spec)
+        ? []
+        : ["database needs, or a recommended starting schema if they do not know"];
     case "api":
-      return spec.api?.endpoints.length ? [] : ["API endpoints, or skip if none"];
+      return spec.api?.endpoints.length
+        ? []
+        : ["API endpoints, or a small recommended API if they do not know"];
     case "security":
-      return hasSecurity(spec) ? [] : ["security constraints, or skip if none"];
+      return hasSecurity(spec)
+        ? []
+        : ["security needs, or a simple recommended default if they do not know"];
     case "ai_rules":
-      return spec.aiRules ? [] : ["AI rules, or skip if none"];
+      return spec.aiRules
+        ? []
+        : ["AI rules, or a few starter rules if they do not know"];
     case "review":
       return ["explicit user confirmation"];
     case "complete":

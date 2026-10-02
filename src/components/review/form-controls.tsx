@@ -1,8 +1,20 @@
 import type { ReactNode } from "react";
 import { moveItem, removeItem } from "../../lib/review/view-model";
 
-const controlClass =
-  "w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm leading-6 text-zinc-950 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-zinc-900 disabled:opacity-60 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-50 dark:focus-visible:outline-zinc-100";
+export const controlClass =
+  "w-full rounded-xl border border-white/10 bg-[#101010] px-3.5 py-2.5 text-sm leading-6 text-[#f3f3ee] placeholder:text-white/30 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#d4f26a] disabled:opacity-50";
+
+export const itemCardClass =
+  "space-y-4 rounded-2xl border border-white/8 bg-white/[0.03] p-4";
+
+export const ghostButtonClass =
+  "inline-flex items-center justify-center rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-sm text-white/70 transition-colors hover:border-white/20 hover:bg-white/8 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#d4f26a] disabled:cursor-not-allowed disabled:opacity-40";
+
+export const iconButtonClass =
+  "inline-flex size-9 items-center justify-center rounded-lg border border-white/10 bg-white/5 text-white/65 transition-colors hover:border-white/20 hover:bg-white/8 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#d4f26a] disabled:cursor-not-allowed disabled:opacity-40";
+
+export const primaryButtonClass =
+  "inline-flex items-center justify-center rounded-full bg-[#d4f26a] px-5 py-2.5 text-sm font-medium text-[#14160c] transition hover:bg-[#e2f88a] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#d4f26a] disabled:cursor-not-allowed disabled:opacity-40";
 
 export function Field({
   id,
@@ -17,12 +29,12 @@ export function Field({
 }) {
   return (
     <div className="space-y-1.5">
-      <label htmlFor={id} className="block text-sm font-medium">
+      <label htmlFor={id} className="block text-sm font-medium text-white/75">
         {label}
       </label>
       {children}
       {error ? (
-        <p id={`${id}-error`} className="text-sm text-red-700 dark:text-red-400" role="alert">
+        <p id={`${id}-error`} className="text-sm text-rose-300" role="alert">
           {error}
         </p>
       ) : null}
@@ -88,7 +100,7 @@ export function TextArea({
         aria-invalid={Boolean(error)}
         aria-describedby={error ? `${id}-error` : undefined}
         onChange={(event) => onChange(event.target.value)}
-        className={controlClass}
+        className={`${controlClass} min-h-24 resize-y`}
       />
     </Field>
   );
@@ -149,9 +161,12 @@ export function StringList({
 }) {
   return (
     <fieldset className="space-y-3">
-      <legend className="text-sm font-medium">{label}</legend>
+      <legend className="text-sm font-medium text-white/75">{label}</legend>
       {items.map((item, index) => (
-        <div key={`${id}-${String(index)}`} className="flex flex-col gap-2 sm:flex-row sm:items-start">
+        <div
+          key={`${id}-${String(index)}`}
+          className="flex flex-col gap-2 sm:flex-row sm:items-center"
+        >
           <label className="sr-only" htmlFor={`${id}-${String(index)}`}>
             {`${label} ${String(index + 1)}`}
           </label>
@@ -161,40 +176,36 @@ export function StringList({
             value={item}
             disabled={disabled}
             onChange={(event) =>
-              onChange(items.map((current, currentIndex) =>
-                currentIndex === index ? event.target.value : current,
-              ))
+              onChange(
+                items.map((current, currentIndex) =>
+                  currentIndex === index ? event.target.value : current,
+                ),
+              )
             }
             className={controlClass}
           />
-          <div className="flex flex-wrap gap-2">
-            <button
-              type="button"
+          <div className="flex shrink-0 gap-1.5">
+            <IconButton
+              label={`Move ${label} ${String(index + 1)} up`}
               disabled={disabled || index === 0}
-              aria-label={`Move ${label} ${String(index + 1)} up`}
               onClick={() => onChange(moveItem(items, index, -1))}
-              className={ghostButtonClass}
             >
-              Up
-            </button>
-            <button
-              type="button"
+              <ArrowUpIcon />
+            </IconButton>
+            <IconButton
+              label={`Move ${label} ${String(index + 1)} down`}
               disabled={disabled || index === items.length - 1}
-              aria-label={`Move ${label} ${String(index + 1)} down`}
               onClick={() => onChange(moveItem(items, index, 1))}
-              className={ghostButtonClass}
             >
-              Down
-            </button>
-            <button
-              type="button"
+              <ArrowDownIcon />
+            </IconButton>
+            <IconButton
+              label={`Delete ${label} ${String(index + 1)}`}
               disabled={disabled}
-              aria-label={`Delete ${label} ${String(index + 1)}`}
               onClick={() => onChange(removeItem(items, index))}
-              className={ghostButtonClass}
             >
-              Delete
-            </button>
+              <TrashIcon />
+            </IconButton>
           </div>
         </div>
       ))}
@@ -210,8 +221,68 @@ export function StringList({
   );
 }
 
-export const ghostButtonClass =
-  "rounded-md border border-zinc-300 px-3 py-1.5 text-sm text-zinc-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-zinc-900 disabled:cursor-not-allowed disabled:opacity-50 dark:border-zinc-700 dark:text-zinc-300 dark:focus-visible:outline-zinc-100";
+export function IconButton({
+  label,
+  disabled,
+  onClick,
+  children,
+}: {
+  label: string;
+  disabled?: boolean;
+  onClick: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      aria-label={label}
+      onClick={onClick}
+      className={iconButtonClass}
+    >
+      {children}
+    </button>
+  );
+}
 
-export const primaryButtonClass =
-  "rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-zinc-900 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900 dark:focus-visible:outline-zinc-100";
+export function ArrowUpIcon() {
+  return (
+    <svg viewBox="0 0 16 16" className="size-4" fill="none" aria-hidden="true">
+      <path
+        d="M8 12.5V3.5M8 3.5 4.5 7M8 3.5 11.5 7"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+export function ArrowDownIcon() {
+  return (
+    <svg viewBox="0 0 16 16" className="size-4" fill="none" aria-hidden="true">
+      <path
+        d="M8 3.5v9M8 12.5 4.5 9M8 12.5 11.5 9"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+export function TrashIcon() {
+  return (
+    <svg viewBox="0 0 16 16" className="size-4" fill="none" aria-hidden="true">
+      <path
+        d="M3.5 4.5h9M6.5 4.5V3h3v1.5M5 4.5l.4 8.1a1 1 0 0 0 1 .9h3.2a1 1 0 0 0 1-.9L11 4.5"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}

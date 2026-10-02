@@ -1,5 +1,6 @@
 import { InterviewError, InterviewErrorCode } from "./errors";
 import { parseInterviewExtraction, parseProjectSpecPatch } from "./patch";
+import { softenInterviewPayload } from "./soften";
 import type { InterviewExtraction } from "./types";
 
 function stripFences(value: string): string {
@@ -93,7 +94,7 @@ export function parseInterviewResponse(content: string): {
     };
   }
 
-  const candidate = normalizeCandidate(parsed);
+  const candidate = softenInterviewPayload(normalizeCandidate(parsed));
   const extraction = parseInterviewExtraction(candidate);
   if (extraction.success) {
     return { extraction: extraction.data, question };

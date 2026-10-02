@@ -64,6 +64,33 @@ describe("interview flow", () => {
     });
   });
 
+  it("returns a safe failure when a project cannot be created", async () => {
+    const store = createMemoryStore();
+    const interview = createInterviewFlow({
+      requireAuth: createRequireAuth(async () => ({ userId: "user_a" })),
+      projects: {
+        ...createMemoryProjectRepository(store),
+        createProject: async () => {
+          throw new Error("insert failed");
+        },
+      },
+      interviews: createMemoryInterviewRepository(store),
+      createProvider: () =>
+        new MockLLMProvider({
+          response: {
+            content: structured("What are you building?", { patch: {} }),
+            provider: "mock",
+          },
+        }),
+    });
+
+    const result = await interview.startProject();
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error?.message).not.toContain("insert failed");
+    }
+  });
+
   it("creates a project, opens a session, and returns a view model", async () => {
     const { flow: interview, store } = flow();
     const result = await interview.startProject();
@@ -316,7 +343,7 @@ describe("interview flow", () => {
     }
   });
 
-  it("returns a safe validation message when the model output is unusable", async () => {
+  it("continues the interview when the model output is unusable", async () => {
     const provider = new MockLLMProvider({
       response: (request) => {
         if (request.messages[0]?.content.includes("Latest user answer")) {
@@ -346,10 +373,11 @@ describe("interview flow", () => {
 
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.view.error?.message).toBe(
-        "We couldn't process that answer. Your previous progress is safe.",
+      expect(result.view.error).toBeUndefined();
+      expect(result.view.phase).toBe("goals");
+      expect(result.view.messages.at(-1)?.content).toBe(
+        "What's the main outcome you want first?",
       );
-      expect(result.view.error?.message).not.toContain("not-json");
     }
   });
 });

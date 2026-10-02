@@ -22,12 +22,24 @@ vi.mock("next/link", () => ({
 vi.mock("@clerk/nextjs", () => ({
   Show: () => null,
   SignInButton: ({ children }: { children: ReactNode }) => children,
+  SignOutButton: ({ children }: { children: ReactNode }) => children,
   UserButton: () => null,
   SignIn: () => <div>Clerk sign-in</div>,
+  SignUp: () => <div>Clerk sign-up</div>,
+  useUser: () => ({
+    isSignedIn: false,
+    isLoaded: true,
+    user: null,
+  }),
 }));
 
 vi.mock("./actions/interview", () => ({
   startInterviewAction: vi.fn(),
+}));
+
+vi.mock("./actions/workspace", () => ({
+  renameProjectAction: vi.fn(),
+  deleteProjectAction: vi.fn(),
 }));
 
 const loadInterview = vi.fn();
@@ -38,6 +50,11 @@ vi.mock("../server/runtime", () => ({
   getInterviewFlow: () => ({ loadInterview }),
   getReviewFlow: () => ({ load: loadReview }),
   getGenerationFlow: () => ({ load: loadGenerate }),
+  listWorkspaceProjects: async () => [],
+}));
+
+vi.mock("../server/application/workspace", () => ({
+  loadWorkspaceProjects: async () => [],
 }));
 
 vi.mock("../server/application/interview-flow", () => ({
@@ -67,6 +84,7 @@ vi.mock("next/navigation", () => ({
 const { default: Home } = await import("./page");
 const { default: StartPage } = await import("./start/page");
 const { default: SignInPage } = await import("./sign-in/[[...sign-in]]/page");
+const { default: SignUpPage } = await import("./sign-up/[[...sign-up]]/page");
 const { default: NotFoundPage } = await import("./not-found");
 const { default: AppError } = await import("./error");
 const { default: InterviewPage } = await import("./interview/[projectId]/page");
@@ -76,23 +94,38 @@ const { default: GeneratePage } = await import("./generate/[projectId]/page");
 describe("public routes", () => {
   it("renders the home page", () => {
     render(<Home />);
-    expect(screen.getByRole("heading", { name: "Vrompt" })).toBeInTheDocument();
     expect(
-      screen.getByText(/Turn a project idea into a structured specification/),
+      screen.getByRole("heading", { name: /Turn your idea into context/i }),
     ).toBeInTheDocument();
-    expect(screen.getByText("Interview → Review → Generate")).toBeInTheDocument();
-    expect(screen.getByText("AGENTS.md")).toBeInTheDocument();
+    expect(
+      screen.getByText(/Answer a short interview, review the generated spec/),
+    ).toBeInTheDocument();
+    expect(screen.getAllByText(/Interview → Review → Generate/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText("AGENTS.md").length).toBeGreaterThan(0);
+    expect(screen.getByRole("heading", { name: /Simple plans/i })).toBeInTheDocument();
   });
 
   it("renders the start page without extra fields", async () => {
     render(await StartPage({ searchParams: Promise.resolve({}) }));
-    expect(screen.getByRole("heading", { name: "Start a project" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /real spec/i })).toBeInTheDocument();
     expect(
-      screen.getByText(/structured series of questions/),
+      screen.getByText(/Interview, review the spec, then download a ZIP/),
+    ).toBeInTheDocument();
+    expect(screen.getByText("History")).toBeInTheDocument();
+    expect(
+      screen.getByRole("list", { name: "What happens next" }),
     ).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: "Create project and begin" }),
     ).toBeInTheDocument();
+    expect(screen.queryByLabelText(/project name/i)).not.toBeInTheDocument();
+  });
+
+  it("shows a safe start error", async () => {
+    render(await StartPage({ searchParams: Promise.resolve({ error: "start" }) }));
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "The project could not be created",
+    );
   });
 
   it("explains that authentication is not configured", () => {
@@ -102,6 +135,14 @@ describe("public routes", () => {
       screen.getByText(/Authentication is not configured/),
     ).toBeInTheDocument();
     expect(screen.queryByText(/CLERK_SECRET_KEY/)).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Back to Vrompt/i })).toBeInTheDocument();
+  });
+
+  it("renders the sign-up page", () => {
+    render(<SignUpPage />);
+    expect(
+      screen.getByRole("heading", { name: "Create an account" }),
+    ).toBeInTheDocument();
   });
 
   it("renders a safe not-found page", () => {

@@ -3,11 +3,13 @@
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { ProjectSpec } from "../../core/schema/project-spec";
 import { toReviewViewModel } from "../../lib/review/view-model";
 import { ReviewEditor, type SaveReview } from "./review-editor";
 import { ReviewSections } from "./review-sections";
+
+const navigate = vi.hoisted(() => ({ push: vi.fn() }));
 
 vi.mock("next/link", () => ({
   default: ({
@@ -22,6 +24,10 @@ vi.mock("next/link", () => ({
       {children}
     </a>
   ),
+}));
+
+vi.mock("next/navigation", () => ({
+  useRouter: () => navigate,
 }));
 
 const minimalSpec: ProjectSpec = {
@@ -97,6 +103,10 @@ function viewFor(spec: ProjectSpec) {
 }
 
 describe("review UI", () => {
+  beforeEach(() => {
+    navigate.push.mockClear();
+  });
+
   it("renders project fields and a semantic heading", () => {
     render(
       <ReviewEditor initialView={viewFor(minimalSpec)} saveReview={vi.fn()} />,
@@ -278,6 +288,34 @@ describe("review UI", () => {
     expect(
       screen.getByRole("link", { name: "Continue to generation" }),
     ).toHaveAttribute("href", "/generate/proj-1");
+  });
+
+  it("saves a valid draft as ready and continues to generation", async () => {
+    const user = userEvent.setup();
+    const saveReview = vi.fn<SaveReview>(async ({ spec }) => ({
+      ok: true,
+      view: viewFor(spec),
+    }));
+
+    render(
+      <ReviewEditor initialView={viewFor(minimalSpec)} saveReview={saveReview} />,
+    );
+
+    const continueButton = screen.getByRole("button", {
+      name: "Continue to generation",
+    });
+    expect(continueButton).toBeEnabled();
+
+    await user.click(continueButton);
+
+    expect(saveReview).toHaveBeenCalledWith({
+      projectId: "proj-1",
+      spec: {
+        ...minimalSpec,
+        project: { ...minimalSpec.project, status: "ready" },
+      },
+    });
+    expect(navigate.push).toHaveBeenCalledWith("/generate/proj-1");
   });
 
   it("shows needs attention when the local spec is invalid", async () => {

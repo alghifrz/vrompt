@@ -1,4 +1,8 @@
 import type { ConsistencyDiagnostic } from "../consistency/diagnostics";
+import type { ErdView, PrdView } from "./docs";
+import type { GenerationJob } from "./jobs";
+
+export type { GenerationJob } from "./jobs";
 
 export const GENERATION_TARGETS = [
   "agents-md",
@@ -30,6 +34,11 @@ export interface GenerationResult {
   readonly generatedAt: string;
   readonly targets: readonly GeneratedTarget[];
   readonly diagnostics: readonly ConsistencyDiagnostic[];
+  readonly jobs?: readonly GenerationJob[];
+  readonly jobFiles?: readonly GeneratedFile[];
+  readonly docFiles?: readonly GeneratedFile[];
+  readonly prd?: PrdView;
+  readonly erd?: ErdView;
 }
 
 export interface GenerationRenderer {
