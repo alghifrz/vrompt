@@ -694,7 +694,7 @@ function fieldsForNoun(
     );
   }
 
-  if (noun.kind === "subject" && domain.theme === "attendance") {
+  if (noun.kind === "subject" || noun.kind === "supporting") {
     return uniqueFields(
       [
         field("string", "id", {
@@ -702,13 +702,11 @@ function fieldsForNoun(
           notes: idNotes ? `Kunci utama ${noun.name}.` : `Primary key for ${noun.name}.`,
         }),
         field("string", "name", {
-          notes: idNotes ? "Nama siswa." : "Student display name.",
+          notes: idNotes ? `Nama ${noun.name.toLowerCase()}.` : `${noun.name} display name.`,
         }),
-        field("string", "className", {
-          notes: idNotes ? "Kelas, misalnya 7A." : "Class label, for example 7A.",
-        }),
-        field("string", "studentNumber", {
-          notes: idNotes ? "Nomor induk siswa." : "School student number.",
+        field("string", "status", {
+          required: false,
+          notes: idNotes ? "Status baris ini, jika dipakai." : "Optional row status.",
         }),
         field("datetime", "createdAt", {
           notes: idNotes ? "Waktu baris dibuat." : "Row created at.",
@@ -721,37 +719,32 @@ function fieldsForNoun(
     );
   }
 
-  if (noun.kind === "record" && domain.theme === "attendance") {
-    const subjectId = mermaidId(domain.subject?.name ?? (idNotes ? "Siswa" : "Student"));
+  if (noun.kind === "record") {
+    const subjectId = domain.subject ? mermaidId(domain.subject.name) : undefined;
     return uniqueFields(
       [
         field("string", "id", {
           key: "PK",
           notes: idNotes ? `Kunci utama ${noun.name}.` : `Primary key for ${noun.name}.`,
         }),
-        field("string", `${lowerFirst(subjectId)}Id`, {
-          key: "FK",
-          notes: idNotes
-            ? `Mengacu ke ${subjectId}.id. Siswa yang diabsen.`
-            : `References ${subjectId}.id. The student being marked.`,
-        }),
+        ...(subjectId
+          ? [
+              field("string", `${lowerFirst(subjectId)}Id`, {
+                key: "FK" as const,
+                notes: idNotes
+                  ? `Mengacu ke ${subjectId}.id.`
+                  : `References ${subjectId}.id.`,
+              }),
+            ]
+          : []),
         field("string", `${lowerFirst(actorId)}Id`, {
           key: "FK",
           notes: idNotes
-            ? `Mengacu ke ${actorId}.id. Guru yang mencatat.`
-            : `References ${actorId}.id. The teacher who saved this mark.`,
-        }),
-        field("date", "attendedOn", {
-          notes: idNotes ? "Tanggal kehadiran." : "Attendance date.",
+            ? `Mengacu ke ${actorId}.id.`
+            : `References ${actorId}.id.`,
         }),
         field("string", "status", {
-          notes: idNotes
-            ? "Status: hadir, izin, sakit, atau alpha."
-            : "Status: present, excused, sick, or absent.",
-        }),
-        field("text", "note", {
-          required: false,
-          notes: idNotes ? "Keterangan opsional." : "Optional remark.",
+          notes: idNotes ? `Status ${noun.name.toLowerCase()}.` : `${noun.name} status.`,
         }),
         field("datetime", "createdAt", {
           notes: idNotes ? "Waktu baris dibuat." : "Row created at.",
@@ -764,112 +757,7 @@ function fieldsForNoun(
     );
   }
 
-  if (domain.theme === "commerce") {
-    return commerceFields(noun, domain);
-  }
-
   return inferFields(noun.name, noun.description, domain);
-}
-
-function commerceFields(noun: DomainModel["actor"], domain: DomainModel): DocField[] {
-  const idNotes = domain.language === "id";
-  const stamp = [
-    field("datetime", "createdAt", {
-      notes: idNotes ? "Waktu baris dibuat." : "Row created at.",
-    }),
-    field("datetime", "updatedAt", {
-      notes: idNotes ? "Waktu terakhir diubah." : "Last update time.",
-    }),
-  ];
-  const id = field("string", "id", {
-    key: "PK",
-    notes: idNotes ? `Kunci utama ${noun.name}.` : `Primary key for ${noun.name}.`,
-  });
-
-  if (noun.kind === "actor") {
-    return uniqueFields(
-      [
-        id,
-        field("string", "name", { notes: idNotes ? "Nama pemilik." : "Owner display name." }),
-        field("string", "email", { notes: idNotes ? "Email untuk masuk." : "Sign-in email." }),
-        ...stamp,
-      ],
-      noun.id,
-    );
-  }
-
-  if (/buku|book|produk|product/i.test(noun.name)) {
-    return uniqueFields(
-      [
-        id,
-        field("string", "title", { notes: idNotes ? "Judul yang tampil di katalog." : "Catalog title." }),
-        field("string", "author", {
-          required: false,
-          notes: idNotes ? "Penulis, jika relevan." : "Author, if relevant.",
-        }),
-        field("number", "price", { notes: idNotes ? "Harga jual." : "Selling price." }),
-        field("number", "stock", { notes: idNotes ? "Jumlah stok tersedia." : "Units in stock." }),
-        ...stamp,
-      ],
-      noun.id,
-    );
-  }
-
-  if (/pelanggan|customer/i.test(noun.name)) {
-    return uniqueFields(
-      [
-        id,
-        field("string", "name", { notes: idNotes ? "Nama pelanggan." : "Customer name." }),
-        field("string", "phone", {
-          required: false,
-          notes: idNotes ? "Nomor yang bisa dihubungi." : "Contact number.",
-        }),
-        ...stamp,
-      ],
-      noun.id,
-    );
-  }
-
-  if (/itempesanan|orderitem/i.test(noun.name)) {
-    return uniqueFields(
-      [
-        id,
-        field("number", "quantity", { notes: idNotes ? "Jumlah yang dibeli." : "Quantity bought." }),
-        field("number", "unitPrice", { notes: idNotes ? "Harga saat transaksi." : "Price at sale time." }),
-        ...stamp,
-      ],
-      noun.id,
-    );
-  }
-
-  if (/pembayaran|payment/i.test(noun.name)) {
-    return uniqueFields(
-      [
-        id,
-        field("string", "method", {
-          notes: idNotes ? "Metode, misalnya transfer atau QR." : "Method, for example transfer or QR.",
-        }),
-        field("string", "status", { notes: idNotes ? "menunggu, lunas, atau gagal." : "pending, paid, or failed." }),
-        field("number", "amount", { notes: idNotes ? "Nominal yang dibayar." : "Amount paid." }),
-        field("string", "accountNumber", {
-          required: false,
-          notes: idNotes ? "Nomor rekening tujuan." : "Destination account number.",
-        }),
-        ...stamp,
-      ],
-      noun.id,
-    );
-  }
-
-  return uniqueFields(
-    [
-      id,
-      field("string", "status", { notes: idNotes ? "Status pesanan." : "Order status." }),
-      field("number", "total", { notes: idNotes ? "Total belanja." : "Order total." }),
-      ...stamp,
-    ],
-    noun.id,
-  );
 }
 
 function inferFields(
@@ -1334,22 +1222,6 @@ function softenPurpose(description: string): string {
 }
 
 function featureFlowLines(name: string, domain: DomainModel): string[] {
-  if (domain.theme === "attendance" && domain.language === "id") {
-    return [
-      `- ${domain.actor.name} masuk, lalu melihat daftar ${domain.subject?.name ?? "siswa"} untuk hari ini.`,
-      `- Di samping setiap nama, ${domain.actor.name} memilih hadir, izin, sakit, atau alpha.`,
-      `- Satu kali simpan menulis ${domain.record.name} untuk tanggal itu.`,
-      `- Layar konfirmasi menampilkan ringkasan, misalnya berapa yang hadir.`,
-    ];
-  }
-  if (domain.theme === "attendance") {
-    return [
-      `- ${domain.actor.name} signs in and sees today's ${domain.subject?.name ?? "student"} list.`,
-      `- Next to each name, mark present, excused, sick, or absent.`,
-      `- One save writes ${domain.record.name} rows for that date.`,
-      `- A confirmation screen shows a short summary.`,
-    ];
-  }
   if (domain.language === "id") {
     return [
       `- ${domain.actor.name} masuk dan melihat daftar ${domain.record.name}.`,

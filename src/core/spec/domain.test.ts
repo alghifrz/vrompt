@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ProjectSpec } from "../schema/project-spec";
 import {
-  buildDomainModel,
   isWeakDatabase,
   recommendedDatabase,
   recommendedFeatures,
@@ -59,29 +58,21 @@ describe("domain blueprint", () => {
     const features = recommendedFeatures(bookstore);
     const names = features.map((feature) => feature.name);
 
-    expect(names).toEqual(
-      expect.arrayContaining([
-        "Pembayaran via Rekening Tetap",
-        "Kelola Katalog Buku",
-        "Kelola Stok",
-        "Catat Penjualan",
-        "Data Pelanggan",
-      ]),
-    );
-    expect(features.length).toBeGreaterThanOrEqual(4);
+    expect(names).toContain("Pembayaran via Rekening Tetap");
+    expect(names.some((name) => /buku|stok|penjualan|pelanggan/i.test(name))).toBe(true);
+    expect(features.length).toBeGreaterThanOrEqual(3);
   });
 
-  it("replaces persona-and-feature tables with a shop schema", () => {
+  it("replaces persona-and-feature tables with nouns from the interview", () => {
     expect(isWeakDatabase(bookstore)).toBe(true);
-    expect(buildDomainModel(bookstore).theme).toBe("commerce");
 
     const database = recommendedDatabase(bookstore);
     const names = database.entities?.map((entity) => entity.name) ?? [];
 
-    expect(names).toEqual(
-      expect.arrayContaining(["Buku", "Pelanggan", "Pesanan", "ItemPesanan", "Pembayaran"]),
+    expect(names.some((name) => /buku|penjualan|pesanan|pembayaran|stok|pelanggan/i.test(name))).toBe(
+      true,
     );
     expect(names).not.toContain("Pembayaran Via Rekening Tetap");
-    expect(database.relationships?.length).toBeGreaterThanOrEqual(4);
+    expect(names.length).toBeGreaterThanOrEqual(3);
   });
 });

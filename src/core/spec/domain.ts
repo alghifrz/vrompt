@@ -1,7 +1,6 @@
 import type { Feature, ProjectSpec } from "../schema/project-spec";
 
 export type SpecLanguage = "id" | "en";
-export type DomainTheme = "attendance" | "visit" | "commerce" | "generic";
 
 export interface DomainEndpoint {
   readonly method: "GET" | "POST" | "PATCH";
@@ -34,7 +33,6 @@ export interface DomainRelationship {
 
 export interface DomainModel {
   readonly language: SpecLanguage;
-  readonly theme: DomainTheme;
   readonly actor: DomainNoun;
   readonly subject?: DomainNoun;
   readonly record: DomainNoun;
@@ -44,6 +42,85 @@ export interface DomainModel {
   readonly entities: readonly DomainNoun[];
   readonly relationships: readonly DomainRelationship[];
 }
+
+const STOPWORDS = new Set([
+  "yang",
+  "untuk",
+  "dengan",
+  "secara",
+  "tanpa",
+  "aplikasi",
+  "sistem",
+  "web",
+  "the",
+  "and",
+  "with",
+  "for",
+  "from",
+  "this",
+  "that",
+  "application",
+  "product",
+  "project",
+  "pengguna",
+  "user",
+  "data",
+  "fitur",
+  "feature",
+  "masih",
+  "manual",
+  "digital",
+  "melalui",
+  "sebagai",
+  "memungkinkan",
+  "melakukan",
+  "menggunakan",
+  "setiap",
+  "hari",
+  "atau",
+  "serta",
+  "lebih",
+  "agar",
+  "pada",
+  "dari",
+  "dalam",
+  "bisa",
+  "sudah",
+  "belum",
+  "adalah",
+  "tetap",
+  "nomor",
+  "kode",
+  "via",
+  "main",
+  "record",
+  "entity",
+  "items",
+  "item",
+  "board",
+  "papan",
+  "today",
+  "cepat",
+  "akurat",
+  "scattered",
+  "toolkit",
+  "field",
+  "conflicts",
+  "lists",
+  "quickly",
+  "details",
+  "live",
+  "separate",
+  "tools",
+  "pencatatan",
+  "pengelolaan",
+  "proses",
+  "service",
+  "toko",
+  "warung",
+  "shop",
+  "store",
+]);
 
 export function specCorpus(spec: ProjectSpec): string {
   return [
@@ -66,12 +143,9 @@ export function specCorpus(spec: ProjectSpec): string {
 
 export function specLanguage(spec: ProjectSpec): SpecLanguage {
   const text = specCorpus(spec);
-  const indonesian = (
-    text.match(
-      /\b(yang|untuk|dengan|secara|tanpa|siswa|guru|kehadiran|pencatatan|aplikasi|setiap|hari|kelas|absen|hadir|toko|buku|penjualan|pelanggan|stok|pembayaran)\b/g,
-    ) ?? []
-  ).length;
-  const english = (text.match(/\b(the|and|with|for|from|this|that|user|visit)\b/g) ?? []).length;
+  const indonesian = (text.match(/\b(yang|untuk|dengan|secara|tanpa|aplikasi|dari|pada|ini|itu|dan|atau|bisa|ada)\b/g) ?? [])
+    .length;
+  const english = (text.match(/\b(the|and|with|for|from|this|that|user)\b/g) ?? []).length;
   return indonesian > english ? "id" : "en";
 }
 
@@ -96,8 +170,23 @@ export function shouldExpandFeatures(spec: ProjectSpec, answer?: string): boolea
   if (wantsOnlyListedFeatures(answer)) {
     return false;
   }
+  const current = spec.features ?? [];
+  if (current.length >= 3) {
+    return false;
+  }
   const domain = buildDomainModel(spec);
-  return domain.features.length >= 3 && (spec.features?.length ?? 0) < 3;
+  if (domain.features.length < 3) {
+    return false;
+  }
+  const covered = current.map((feature) => normalizeName(feature.name));
+  const uncovered = domain.entities.filter((entity) => {
+    if (entity.kind === "actor") {
+      return false;
+    }
+    const name = normalizeName(entity.name);
+    return !covered.some((item) => item.includes(name) || name.includes(item));
+  });
+  return uncovered.length >= 2;
 }
 
 export function isWeakDatabase(spec: ProjectSpec): boolean {
@@ -112,23 +201,17 @@ export function isWeakDatabase(spec: ProjectSpec): boolean {
   const domain = buildDomainModel(spec);
   const featureNames = new Set((spec.features ?? []).map((feature) => normalizeName(feature.name)));
   const userNames = new Set(
-    [...(spec.users ?? []).map((user) => user.name), ...spec.project.targetUsers].map(
-      normalizeName,
-    ),
+    [...(spec.users ?? []).map((user) => user.name), ...spec.project.targetUsers].map(normalizeName),
   );
   const copiedFeature = entities.some((entity) => featureNames.has(normalizeName(entity.name)));
   const onlyPeople =
     entities.length <= 2 &&
     entities.every(
       (entity) =>
-        userNames.has(normalizeName(entity.name)) ||
-        /penjual|pemilik|guru|user|owner|admin|dispatcher/i.test(entity.name),
+        userNames.has(normalizeName(entity.name)) || entity.name === domain.actor.name,
     );
 
   if (copiedFeature || onlyPeople) {
-    return true;
-  }
-  if (domain.theme === "commerce" && entities.length < 4) {
     return true;
   }
   return false;
@@ -189,8 +272,6 @@ export function recommendedDatabase(
 
 export function buildDomainModel(spec: ProjectSpec): DomainModel {
   const language = specLanguage(spec);
-  const text = specCorpus(spec);
-  const theme = detectTheme(text);
   const actorName =
     spec.users?.[0]?.name ?? spec.project.targetUsers[0] ?? (language === "id" ? "Pengguna" : "User");
   const actor: DomainNoun = {
@@ -204,255 +285,153 @@ export function buildDomainModel(spec: ProjectSpec): DomainModel {
     kind: "actor",
   };
 
-  if (theme === "attendance") {
-    return attendanceModel(spec, language, actor);
-  }
-  if (theme === "visit") {
-    return visitModel(spec, language, actor);
-  }
-  if (theme === "commerce") {
-    return commerceModel(language, actor, text);
-  }
-  return genericModel(spec, language, actor);
-}
+  const terms = interviewTerms(spec, actor.name);
+  const subjects = terms.filter((term) => term.kind === "subject" || term.kind === "supporting");
+  const records = terms.filter((term) => term.kind === "record");
+  const subject = subjects[0];
+  const record =
+    records[0] ??
+    subjects[1] ??
+    fallbackRecord(spec, actor, language);
+  const entities = dedupeNouns([actor, ...subjects, ...records, record]).slice(0, 7);
+  const features = inferredFeatures(spec, actor, entities, language);
+  const relationships = inferredRelationships(actor, subject, record, entities, language);
 
-function attendanceModel(
-  spec: ProjectSpec,
-  language: SpecLanguage,
-  actor: DomainNoun,
-): DomainModel {
-  const subject: DomainNoun = {
-    id: language === "id" ? "Siswa" : "Student",
-    name: language === "id" ? "Siswa" : "Student",
-    description:
-      language === "id" ? "Siswa yang kehadirannya dicatat." : "The student whose attendance is recorded.",
-    kind: "subject",
-  };
-  const record: DomainNoun = {
-    id: language === "id" ? "Kehadiran" : "Attendance",
-    name: language === "id" ? "Kehadiran" : "Attendance",
-    description:
-      language === "id"
-        ? "Satu catatan kehadiran siswa pada suatu hari."
-        : "One attendance mark for a student on a given day.",
-    kind: "record",
-  };
-  const slug = language === "id" ? "kehadiran" : "attendance";
   return {
     language,
-    theme: "attendance",
     actor,
     subject,
     record,
-    slug,
-    endpoints: attendanceEndpoints(language, slug, subject.name.toLowerCase()),
-    features: existingOr(
-      spec.features,
-      language === "id"
-        ? [
-            feature(
-              "feature-absen",
-              "Mengabsen Siswa",
-              "Guru menandai hadir, izin, sakit, atau alpha untuk siswa hari ini.",
-              "must",
-              ["Guru bisa menyimpan absen satu kelas dalam satu layar."],
-            ),
-          ]
-        : [
-            feature(
-              "feature-absen",
-              "Mark attendance",
-              "The teacher marks present, excused, sick, or absent for today's class.",
-              "must",
-              ["A teacher can save attendance for one class on one screen."],
-            ),
-          ],
-    ),
-    entities: [actor, subject, record],
-    relationships: [
-      rel(subject.name, record.name, language, "punya banyak", "has many"),
-      rel(actor.name, record.name, language, "mencatat", "creates"),
-    ],
+    slug: slugify(record.name),
+    endpoints: inferredEndpoints(language, subject, record),
+    features,
+    entities,
+    relationships,
   };
 }
 
-function visitModel(spec: ProjectSpec, language: SpecLanguage, actor: DomainNoun): DomainModel {
-  const record: DomainNoun = {
-    id: "Visit",
-    name: "Visit",
-    description:
-      language === "id"
-        ? "Kunjungan atau jadwal yang dikelola di aplikasi."
-        : "A scheduled visit the team manages.",
-    kind: "record",
+function interviewTerms(spec: ProjectSpec, actorName: string): DomainNoun[] {
+  const language = specLanguage(spec);
+  const corpus = specCorpus(spec);
+  const counts = new Map<string, number>();
+  const add = (raw: string, weight: number) => {
+    const word = normalizeToken(raw);
+    if (!word || isNoiseTerm(word, actorName, spec.project.name)) {
+      return;
+    }
+    counts.set(word, (counts.get(word) ?? 0) + weight);
   };
-  return {
-    language,
-    theme: "visit",
-    actor,
-    record,
-    slug: "visits",
-    endpoints: genericEndpoints(language, "visits", record.name),
-    features: existingOr(spec.features, [
-      feature(
-        "feature-board",
-        language === "id" ? "Papan kunjungan" : "Visit board",
-        language === "id" ? "Lihat kunjungan hari ini." : "Show today's visits.",
-        "must",
-        [language === "id" ? "Papan menampilkan kunjungan hari ini." : "The board lists today's visits."],
-      ),
-    ]),
-    entities: [actor, record],
-    relationships: [rel(actor.name, record.name, language, "mengelola", "manages")],
-  };
+
+  for (const extra of namedObjects(spec, actorName)) {
+    add(extra, 4);
+  }
+  for (const match of corpus.matchAll(
+    /\b(?:kelola|catat|mencatat|mengelola|manage|record|assign)\s+([a-z]{4,})\b/g,
+  )) {
+    add(match[1] ?? "", 3);
+  }
+
+  return [...counts.entries()]
+    .sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]))
+    .slice(0, 6)
+    .map(([word]) => {
+      const name = titleCase(word);
+      return {
+        id: nounId(name),
+        name,
+        description:
+          language === "id"
+            ? `Data ${name} yang muncul dari wawancara.`
+            : `${name} inferred from the interview.`,
+        kind: classifyTerm(word, corpus),
+      };
+    });
 }
 
-function commerceModel(
-  language: SpecLanguage,
+function namedObjects(spec: ProjectSpec, actorName: string): string[] {
+  const extras: string[] = [];
+  for (const feature of spec.features ?? []) {
+    extras.push(
+      ...feature.name
+        .replace(/^(meng|mem|men|me)[a-z]*/i, "")
+        .split(/\s+/)
+        .filter((word) => word.length >= 4),
+    );
+  }
+  extras.push(
+    ...spec.project.targetUsers.flatMap((user) => user.split(/\s+/)).filter((word) => word.length >= 4),
+    ...spec.project.name.split(/\s+/).filter((word) => word.length >= 4),
+  );
+  if ((spec.features?.length ?? 0) === 0) {
+    extras.push(
+      ...`${spec.project.description} ${spec.project.problem}`
+        .split(/[^\p{L}]+/u)
+        .filter((word) => word.length >= 4),
+    );
+  }
+  return extras.filter((word) => normalizeName(word) !== normalizeName(actorName));
+}
+
+function normalizeToken(value: string): string {
+  const word = value.toLowerCase();
+  if (word.length > 4 && word.endsWith("s") && !word.endsWith("ss")) {
+    return word.slice(0, -1);
+  }
+  return word;
+}
+
+function isNoiseTerm(word: string, actorName: string, projectName: string): boolean {
+  if (STOPWORDS.has(word) || isLikelyVerb(word)) {
+    return true;
+  }
+  if (normalizeName(word) === normalizeName(actorName)) {
+    return true;
+  }
+  if (normalizeName(word) === `${normalizeName(actorName)}s`) {
+    return true;
+  }
+  if (normalizeName(word) === normalizeName(projectName)) {
+    return true;
+  }
+  return false;
+}
+
+function isLikelyVerb(word: string): boolean {
+  return (
+    /^(meng|mem|men|me|di|ber)[a-z]{3,}$/.test(word) ||
+    /^(assign|show|list|help|make|keep|use|manage|record|deliver)$/.test(word)
+  );
+}
+
+function classifyTerm(word: string, corpus: string): DomainNoun["kind"] {
+  if (
+    /(pembayaran|penjualan|pesanan|kehadiran|kunjungan|order|payment|visit|attendance|note)/i.test(
+      word,
+    )
+  ) {
+    return "record";
+  }
+  if (
+    new RegExp(
+      String.raw`\b(catat|mencatat|record|save|simpan|absen|bayar)\w*\s+${word}\b`,
+      "i",
+    ).test(corpus)
+  ) {
+    return "record";
+  }
+  return "subject";
+}
+
+function fallbackRecord(
+  spec: ProjectSpec,
   actor: DomainNoun,
-  text: string,
-): DomainModel {
-  const id = language === "id";
-  const bookish = /buku|book/.test(text);
-  const product: DomainNoun = {
-    id: bookish ? (id ? "Buku" : "Book") : id ? "Produk" : "Product",
-    name: bookish ? (id ? "Buku" : "Book") : id ? "Produk" : "Product",
-    description: bookish
-      ? id
-        ? "Buku yang dijual di toko."
-        : "A book sold in the shop."
-      : id
-        ? "Barang yang dijual."
-        : "An item sold in the shop.",
-    kind: "subject",
-  };
-  const customer: DomainNoun = {
-    id: id ? "Pelanggan" : "Customer",
-    name: id ? "Pelanggan" : "Customer",
-    description: id ? "Pembeli yang tercatat di toko." : "A buyer recorded by the shop.",
-    kind: "supporting",
-  };
-  const order: DomainNoun = {
-    id: id ? "Pesanan" : "Order",
-    name: id ? "Pesanan" : "Order",
-    description: id
-      ? "Satu transaksi penjualan ke pelanggan."
-      : "One sales transaction for a customer.",
-    kind: "record",
-  };
-  const line: DomainNoun = {
-    id: id ? "ItemPesanan" : "OrderItem",
-    name: id ? "ItemPesanan" : "OrderItem",
-    description: id
-      ? `Baris ${product.name.toLowerCase()} di dalam pesanan.`
-      : `A ${product.name.toLowerCase()} line inside an order.`,
-    kind: "supporting",
-  };
-  const payment: DomainNoun = {
-    id: id ? "Pembayaran" : "Payment",
-    name: id ? "Pembayaran" : "Payment",
-    description: /rekening|qr/.test(text)
-      ? id
-        ? "Pembayaran pesanan lewat rekening tetap atau kode QR."
-        : "Payment of an order via a fixed account or QR code."
-      : id
-        ? "Pembayaran untuk sebuah pesanan."
-        : "Payment recorded against an order.",
-    kind: "supporting",
-  };
-
-  const paymentFeatureName = /rekening/.test(text)
-    ? id
-      ? "Pembayaran via Rekening Tetap"
-      : "Pay via saved account"
-    : id
-      ? "Catat Pembayaran"
-      : "Record payment";
-
-  return {
-    language,
-    theme: "commerce",
-    actor,
-    subject: product,
-    record: order,
-    slug: id ? "pesanan" : "orders",
-    endpoints: commerceEndpoints(language, product, order, payment),
-    features: [
-      feature(
-        "feature-catalog",
-        id ? `Kelola Katalog ${product.name}` : `Manage ${product.name} catalog`,
-        id
-          ? `Pemilik menambah, mengubah, dan mencari ${product.name.toLowerCase()} yang dijual.`
-          : `The owner adds, edits, and searches ${product.name.toLowerCase()}s for sale.`,
-        "must",
-        [
-          id
-            ? `${product.name} baru bisa disimpan dan muncul di daftar.`
-            : `A new ${product.name.toLowerCase()} can be saved and listed.`,
-        ],
-      ),
-      feature(
-        "feature-stock",
-        id ? "Kelola Stok" : "Manage stock",
-        id
-          ? `Stok ${product.name.toLowerCase()} bisa ditambah atau dikurangi saat ada perubahan.`
-          : `${product.name} stock can go up or down when inventory changes.`,
-        "must",
-        [id ? "Perubahan stok tersimpan dan terlihat di katalog." : "Stock changes are saved and visible."],
-      ),
-      feature(
-        "feature-orders",
-        id ? "Catat Penjualan" : "Record a sale",
-        id
-          ? "Pemilik mencatat pesanan, jumlah, dan total belanja pelanggan."
-          : "The owner records an order, quantities, and the customer total.",
-        "must",
-        [id ? "Satu penjualan tersimpan beserta itemnya." : "One sale is saved with its line items."],
-      ),
-      feature(
-        "feature-payment",
-        paymentFeatureName,
-        /rekening|qr/.test(text)
-          ? id
-            ? "Pelanggan membayar lewat nomor rekening tetap yang ditampilkan sebagai rekening atau kode QR."
-            : "The customer pays through a fixed account number shown as text or a QR code."
-          : id
-            ? "Pemilik menandai pesanan sudah dibayar."
-            : "The owner marks an order as paid.",
-        "must",
-        [
-          id
-            ? "Status pembayaran pesanan berubah setelah bukti atau konfirmasi disimpan."
-            : "The order payment status updates after confirmation is saved.",
-        ],
-      ),
-      feature(
-        "feature-customers",
-        id ? "Data Pelanggan" : "Customer records",
-        id
-          ? "Toko menyimpan nama dan kontak pelanggan yang berulang."
-          : "The shop keeps names and contacts for returning customers.",
-        "should",
-        [id ? "Pelanggan bisa dipilih saat membuat pesanan." : "A customer can be picked when creating an order."],
-      ),
-    ],
-    entities: [actor, product, customer, order, line, payment],
-    relationships: [
-      rel(actor.name, product.name, language, "mengelola", "manages"),
-      rel(customer.name, order.name, language, "memesan", "places"),
-      rel(order.name, line.name, language, "punya banyak", "has many"),
-      rel(product.name, line.name, language, "muncul di", "appears in"),
-      rel(order.name, payment.name, language, "punya", "has"),
-    ],
-  };
-}
-
-function genericModel(spec: ProjectSpec, language: SpecLanguage, actor: DomainNoun): DomainModel {
+  language: SpecLanguage,
+): DomainNoun {
   const fromFeature = spec.features?.[0]?.name;
-  const recordName = nounFromFeature(fromFeature, spec.project.name, language);
-  const record: DomainNoun = {
-    id: nounId(recordName),
-    name: recordName,
+  const name = nounFromFeature(fromFeature, spec.project.name, language);
+  return {
+    id: nounId(name),
+    name,
     description:
       spec.features?.[0]?.description ??
       (language === "id"
@@ -460,63 +439,153 @@ function genericModel(spec: ProjectSpec, language: SpecLanguage, actor: DomainNo
         : `The main record ${actor.name} creates and reviews.`),
     kind: "record",
   };
-  const slug = slugify(recordName);
-  const id = language === "id";
-  return {
-    language,
-    theme: "generic",
-    actor,
-    record,
-    slug,
-    endpoints: genericEndpoints(language, slug, recordName),
-    features: existingOr(spec.features, [
-      feature(
-        "feature-main",
-        fromFeature ? titleCase(fromFeature) : id ? `Kelola ${recordName}` : `Manage ${recordName}`,
-        spec.features?.[0]?.description ??
-          (id
-            ? `${actor.name} membuat dan meninjau ${recordName}.`
-            : `${actor.name} creates and reviews ${recordName}.`),
-        "must",
-        [id ? `${recordName} bisa dibuat dan dilihat di aplikasi.` : `${recordName} can be created and viewed in-app.`],
-      ),
-    ]),
-    entities: [actor, record],
-    relationships: [rel(actor.name, record.name, language, "mencatat", "creates")],
-  };
 }
 
-function detectTheme(text: string): DomainTheme {
-  if (/absen|hadir|kehadiran|presensi|attendance/.test(text)) {
-    return "attendance";
-  }
-  if (/visit|kunjungan|jadwal kunjung|dispatcher/.test(text)) {
-    return "visit";
-  }
-  if (
-    /toko|warung|buku|bookstore|shop|store|jual|stok|stock|pelanggan|katalog|pesanan|pembayaran|produk|inventory|checkout|rekening/.test(
-      text,
-    )
-  ) {
-    return "commerce";
-  }
-  return "generic";
-}
-
-function existingOr(
-  features: readonly Feature[] | undefined,
-  fallback: DomainFeature[],
+function inferredFeatures(
+  spec: ProjectSpec,
+  actor: DomainNoun,
+  entities: readonly DomainNoun[],
+  language: SpecLanguage,
 ): DomainFeature[] {
-  if (features && features.length > 0) {
-    return features.map((feature) => ({
-      id: feature.id,
-      name: feature.name,
-      description: feature.description,
-      priority: feature.priority,
-      acceptance: feature.acceptanceCriteria,
-    }));
+  const existing = (spec.features ?? []).map((item) => ({
+    id: item.id,
+    name: item.name,
+    description: item.description,
+    priority: item.priority,
+    acceptance: item.acceptanceCriteria,
+  }));
+  const extras: DomainFeature[] = [];
+  const covered = new Set(existing.map((item) => normalizeName(item.name)));
+
+  for (const noun of entities) {
+    if (noun.kind === "actor") {
+      continue;
+    }
+    const manageName = language === "id" ? `Kelola ${noun.name}` : `Manage ${noun.name}`;
+    const recordName = language === "id" ? `Catat ${noun.name}` : `Record ${noun.name}`;
+    const title = noun.kind === "record" ? recordName : manageName;
+    if (covered.has(normalizeName(title)) || covered.has(normalizeName(noun.name))) {
+      continue;
+    }
+    if (existing.some((item) => normalizeName(item.name).includes(normalizeName(noun.name)))) {
+      continue;
+    }
+    extras.push(
+      feature(
+        `feature-${slugify(noun.name)}`,
+        title,
+        language === "id"
+          ? `${actor.name} memakai ${noun.name} sebagai bagian dari alur utama.`
+          : `${actor.name} uses ${noun.name} in the main flow.`,
+        extras.length < 2 ? "must" : "should",
+        [
+          language === "id"
+            ? `${noun.name} bisa disimpan dan dilihat di aplikasi.`
+            : `${noun.name} can be saved and viewed in the app.`,
+        ],
+      ),
+    );
+    covered.add(normalizeName(title));
   }
-  return fallback;
+
+  const combined = [...existing, ...extras].slice(0, 6);
+  return combined.length > 0
+    ? combined
+    : [
+        feature(
+          "feature-main",
+          language === "id" ? `Kelola ${entities[1]?.name ?? spec.project.name}` : `Manage ${spec.project.name}`,
+          language === "id"
+            ? `${actor.name} menyelesaikan pekerjaan utama di ${spec.project.name}.`
+            : `${actor.name} completes the main job in ${spec.project.name}.`,
+          "must",
+          [
+            language === "id"
+              ? "Alur utama bisa diselesaikan di dalam aplikasi."
+              : "The main flow can be finished in-app.",
+          ],
+        ),
+      ];
+}
+
+function inferredRelationships(
+  actor: DomainNoun,
+  subject: DomainNoun | undefined,
+  record: DomainNoun,
+  entities: readonly DomainNoun[],
+  language: SpecLanguage,
+): DomainRelationship[] {
+  const links: DomainRelationship[] = [];
+  if (subject && subject.name !== record.name) {
+    links.push(rel(subject.name, record.name, language, "punya banyak", "has many"));
+  }
+  links.push(rel(actor.name, record.name, language, "mencatat", "creates"));
+  for (const noun of entities) {
+    if (noun.kind !== "subject" || noun.name === subject?.name || noun.name === record.name) {
+      continue;
+    }
+    links.push(rel(actor.name, noun.name, language, "mengelola", "manages"));
+  }
+  return links.slice(0, 6);
+}
+
+function inferredEndpoints(
+  language: SpecLanguage,
+  subject: DomainNoun | undefined,
+  record: DomainNoun,
+): DomainEndpoint[] {
+  const recordSlug = slugify(record.name);
+  const subjectSlug = subject ? slugify(subject.name) : undefined;
+  if (language === "id") {
+    return [
+      ...(subjectSlug
+        ? [
+            {
+              method: "GET" as const,
+              path: `/api/${subjectSlug}`,
+              purpose: `Ambil daftar ${subject!.name}.`,
+              authRequired: true,
+            },
+          ]
+        : []),
+      {
+        method: "GET",
+        path: `/api/${recordSlug}`,
+        purpose: `Lihat daftar ${record.name}.`,
+        authRequired: true,
+      },
+      {
+        method: "POST",
+        path: `/api/${recordSlug}`,
+        purpose: `Simpan ${record.name} baru.`,
+        authRequired: true,
+      },
+    ];
+  }
+  return [
+    ...(subjectSlug
+      ? [
+          {
+            method: "GET" as const,
+            path: `/api/${subjectSlug}`,
+            purpose: `List ${subject!.name} records.`,
+            authRequired: true,
+          },
+        ]
+      : []),
+    {
+      method: "GET",
+      path: `/api/${recordSlug}`,
+      purpose: `List ${record.name} records.`,
+      authRequired: true,
+    },
+    {
+      method: "POST",
+      path: `/api/${recordSlug}`,
+      purpose: `Create a ${record.name}.`,
+      authRequired: true,
+    },
+  ];
 }
 
 function featuresFromAnswer(answer: string | undefined, startIndex: number): Feature[] {
@@ -538,147 +607,6 @@ function featuresFromAnswer(answer: string | undefined, startIndex: number): Fea
       priority: "must",
       status: "planned",
       acceptanceCriteria: [],
-    },
-  ];
-}
-
-function attendanceEndpoints(
-  language: SpecLanguage,
-  recordSlug: string,
-  subjectSlug: string,
-): DomainEndpoint[] {
-  if (language === "id") {
-    return [
-      {
-        method: "GET",
-        path: `/api/${subjectSlug}`,
-        purpose: "Ambil daftar siswa untuk kelas hari ini.",
-        authRequired: true,
-      },
-      {
-        method: "GET",
-        path: `/api/${recordSlug}`,
-        purpose: "Lihat rekap kehadiran pada tanggal tertentu.",
-        authRequired: true,
-      },
-      {
-        method: "POST",
-        path: `/api/${recordSlug}`,
-        purpose: "Simpan status kehadiran siswa.",
-        authRequired: true,
-      },
-    ];
-  }
-
-  return [
-    {
-      method: "GET",
-      path: `/api/${subjectSlug}s`,
-      purpose: "List students for today's class.",
-      authRequired: true,
-    },
-    {
-      method: "GET",
-      path: `/api/${recordSlug}`,
-      purpose: "Read attendance for a date.",
-      authRequired: true,
-    },
-    {
-      method: "POST",
-      path: `/api/${recordSlug}`,
-      purpose: "Save an attendance mark.",
-      authRequired: true,
-    },
-  ];
-}
-
-function commerceEndpoints(
-  language: SpecLanguage,
-  product: DomainNoun,
-  order: DomainNoun,
-  payment: DomainNoun,
-): DomainEndpoint[] {
-  const productSlug = slugify(product.name);
-  const orderSlug = slugify(order.name);
-  const paymentSlug = slugify(payment.name);
-  if (language === "id") {
-    return [
-      {
-        method: "GET",
-        path: `/api/${productSlug}`,
-        purpose: `Ambil daftar ${product.name.toLowerCase()} dan stoknya.`,
-        authRequired: true,
-      },
-      {
-        method: "POST",
-        path: `/api/${orderSlug}`,
-        purpose: `Simpan ${order.name.toLowerCase()} baru.`,
-        authRequired: true,
-      },
-      {
-        method: "POST",
-        path: `/api/${paymentSlug}`,
-        purpose: `Catat ${payment.name.toLowerCase()} untuk sebuah pesanan.`,
-        authRequired: true,
-      },
-    ];
-  }
-  return [
-    {
-      method: "GET",
-      path: `/api/${productSlug}`,
-      purpose: `List ${product.name.toLowerCase()}s and stock.`,
-      authRequired: true,
-    },
-    {
-      method: "POST",
-      path: `/api/${orderSlug}`,
-      purpose: `Create a ${order.name.toLowerCase()}.`,
-      authRequired: true,
-    },
-    {
-      method: "POST",
-      path: `/api/${paymentSlug}`,
-      purpose: `Record a ${payment.name.toLowerCase()}.`,
-      authRequired: true,
-    },
-  ];
-}
-
-function genericEndpoints(
-  language: SpecLanguage,
-  slug: string,
-  recordName: string,
-): DomainEndpoint[] {
-  if (language === "id") {
-    return [
-      {
-        method: "GET",
-        path: `/api/${slug}`,
-        purpose: `Lihat daftar ${recordName}.`,
-        authRequired: true,
-      },
-      {
-        method: "POST",
-        path: `/api/${slug}`,
-        purpose: `Buat ${recordName} baru.`,
-        authRequired: true,
-      },
-    ];
-  }
-
-  return [
-    {
-      method: "GET",
-      path: `/api/${slug}`,
-      purpose: `List ${recordName} records.`,
-      authRequired: true,
-    },
-    {
-      method: "POST",
-      path: `/api/${slug}`,
-      purpose: `Create a ${recordName}.`,
-      authRequired: true,
     },
   ];
 }
@@ -723,6 +651,18 @@ function nounFromFeature(
     }
   }
   return language === "id" ? `Catatan ${projectName}` : `${projectName} Record`;
+}
+
+function dedupeNouns(nouns: readonly DomainNoun[]): DomainNoun[] {
+  const seen = new Set<string>();
+  return nouns.filter((noun) => {
+    const key = normalizeName(noun.name);
+    if (seen.has(key)) {
+      return false;
+    }
+    seen.add(key);
+    return true;
+  });
 }
 
 function nounId(value: string): string {

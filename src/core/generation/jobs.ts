@@ -623,24 +623,15 @@ function jobCopy(spec: ProjectSpec) {
 }
 
 function featureJobSteps(feature: Feature, domain: DomainModel, indonesian: boolean): string[] {
-  if (domain.theme === "attendance" && indonesian) {
+  const blob = `${feature.name} ${feature.description}`.toLowerCase();
+  if (indonesian && /absen|hadir|kehadiran/.test(blob)) {
     return [
-      `${domain.actor.name} masuk, lalu melihat daftar ${domain.subject?.name ?? "siswa"} untuk hari ini. Kalau daftar kosong, tampilkan apa yang harus dilakukan.`,
-      `Di samping setiap nama, sediakan pilihan hadir, izin, sakit, dan alpha.`,
-      `Satu tombol simpan menulis ${domain.record.name} untuk tanggal itu. Jangan minta ${domain.actor.name} mengisi form panjang per siswa.`,
-      `Setelah simpan, tampilkan ringkasan: berapa hadir, izin, sakit, dan alpha.`,
+      `${domain.actor.name} masuk, lalu melihat daftar ${domain.subject?.name ?? "data terkait"} untuk hari ini. Kalau daftar kosong, tampilkan apa yang harus dilakukan.`,
+      `Di samping setiap nama, sediakan pilihan status yang disebut di spek, misalnya hadir, izin, sakit, dan alpha bila itu yang diminta.`,
+      `Satu tombol simpan menulis ${domain.record.name} untuk tanggal itu.`,
+      `Setelah simpan, tampilkan ringkasan.`,
       `Kalau simpan gagal, tampilkan pesan yang bisa dipahami dan jangan hapus pilihan yang sudah diklik.`,
       `Kriteria penerimaan: ${feature.acceptanceCriteria.join("; ") || feature.description}`,
-    ];
-  }
-  if (domain.theme === "attendance") {
-    return [
-      `${domain.actor.name} signs in and sees today's ${domain.subject?.name ?? "student"} list. If the list is empty, say what to do next.`,
-      `Next to each name, offer present, excused, sick, and absent.`,
-      `One save writes ${domain.record.name} for that date. Do not force a long form per student.`,
-      `After save, show a summary count.`,
-      `If save fails, show a recoverable error and keep the chosen marks.`,
-      `Acceptance: ${feature.acceptanceCriteria.join("; ") || feature.description}`,
     ];
   }
   if (indonesian) {

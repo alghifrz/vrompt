@@ -9,11 +9,10 @@ function phaseGuidance(phase: InterviewPhase): string {
       return "Capture the main outcome. Do not ask for a second goal if one is already clear.";
     case "features":
       return [
-        "Act as a senior product engineer. From the idea and this answer, write a first-version feature catalog, not one copied sentence.",
-        "Include 4-6 capabilities a working v1 needs for this kind of product. Example: a bookstore needs catalog, stock, sales, payment, and customers.",
-        "Keep the user's named capability as a must-have. Add the implied must-haves around it. Mark extras as should.",
-        "Each feature needs a short name, a clear description, and one acceptance line. Same language as the user.",
-        "Do not ask for more features. Put the full catalog in the patch and move on.",
+        "Act as a senior product engineer. Read the whole interview, then write a first-version feature catalog for THIS product.",
+        "Do not copy one chat sentence as the only feature. Keep anything the user named, then add the other v1 jobs implied by the idea, problem, users, and objects they mentioned.",
+        "Usually 3-6 features. Short names, clear descriptions, one acceptance line. Same language as the user.",
+        "Do not ask for more features. Put the catalog in the patch and move on.",
       ].join(" ");
     case "users":
       return "Capture who it is for. One user type is enough.";
@@ -30,10 +29,9 @@ function phaseGuidance(phase: InterviewPhase): string {
       return "If they do not know, recommend a modular monolith and say why: one deployable app is easier for a first version.";
     case "database":
       return [
-        "Act as a senior data modeler. Infer a real first-version schema from the product and features, not from feature titles.",
-        "A shop needs tables such as product/book, customer, order, order item, and payment — never only the owner persona plus one feature name.",
-        "Give each entity a noun name and a data-focused description. Add the obvious one-to-many relationships.",
-        "If they do not know, still write that schema and say it is a small Postgres start that can grow.",
+        "Act as a senior data modeler. Infer tables from the people, objects, and events in THIS interview.",
+        "Use noun names. Do not copy a persona or a feature title as the only tables.",
+        "Add the obvious one-to-many relationships. If they do not know, still write that schema as a small Postgres start.",
       ].join(" ");
     case "api":
       return "If they do not know, recommend a small authenticated HTTP API and say why: the web app can reuse it later.";

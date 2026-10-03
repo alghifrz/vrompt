@@ -104,10 +104,10 @@ describe("interview infer", () => {
       spec,
     );
 
-    expect((patch?.features?.length ?? 0) >= 4).toBe(true);
-    expect(patch?.features?.some((feature) => /katalog|stok|penjualan|pelanggan/i.test(feature.name))).toBe(
-      true,
-    );
+    expect((patch?.features?.length ?? 0) >= 3).toBe(true);
+    expect(
+      patch?.features?.some((feature) => /buku|stok|penjualan|pelanggan|pembayaran/i.test(feature.name)),
+    ).toBe(true);
   });
 
   it("recommends attendance tables instead of Item", () => {
