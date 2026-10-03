@@ -211,7 +211,7 @@ export function buildDomainModel(spec: ProjectSpec): DomainModel {
     return visitModel(spec, language, actor);
   }
   if (theme === "commerce") {
-    return commerceModel(spec, language, actor, text);
+    return commerceModel(language, actor, text);
   }
   return genericModel(spec, language, actor);
 }
@@ -308,7 +308,6 @@ function visitModel(spec: ProjectSpec, language: SpecLanguage, actor: DomainNoun
 }
 
 function commerceModel(
-  spec: ProjectSpec,
   language: SpecLanguage,
   actor: DomainNoun,
   text: string,
