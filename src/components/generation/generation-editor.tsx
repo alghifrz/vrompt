@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { GENERATION_TARGET_DEFINITIONS } from "../../core/generation/targets";
 import type { GenerationTarget } from "../../core/generation/types";
 import {
@@ -37,6 +37,15 @@ export function GenerationEditor({
   const [error, setError] = useState<GenerationViewError | undefined>();
   const [preview, setPreview] = useState<{ target: string; path: string; content: string }>();
   const [downloading, setDownloading] = useState(false);
+  const downloadResetRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+
+  useEffect(() => {
+    return () => {
+      if (downloadResetRef.current) {
+        clearTimeout(downloadResetRef.current);
+      }
+    };
+  }, []);
 
   if (!page.ready) {
     return (
@@ -454,9 +463,15 @@ export function GenerationEditor({
                 aria-busy={downloading}
                 onClick={() => {
                   setDownloading(true);
+                  if (downloadResetRef.current) {
+                    clearTimeout(downloadResetRef.current);
+                  }
+                  downloadResetRef.current = setTimeout(() => {
+                    setDownloading(false);
+                  }, 800);
                 }}
               >
-                {downloading ? "Preparing download..." : "Download ZIP"}
+                {downloading ? "Downloading..." : "Download ZIP"}
               </a>
             ) : null}
             <button

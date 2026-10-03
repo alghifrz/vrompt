@@ -215,6 +215,25 @@ describe("generation UI", () => {
     );
   });
 
+  it("restores Download ZIP after the download starts", async () => {
+    const user = userEvent.setup();
+    render(
+      <GenerationEditor
+        page={readyPage}
+        generateProject={vi.fn<GenerateProject>(async () => ({
+          ok: true,
+          view: generated,
+        }))}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Generate" }));
+    await user.click(await screen.findByRole("link", { name: "Download ZIP" }));
+
+    expect(screen.getByRole("link", { name: "Downloading..." })).toBeInTheDocument();
+    expect(await screen.findByRole("link", { name: "Download ZIP" })).toBeInTheDocument();
+  });
+
   it("shows a visual PRD and ERD preview", async () => {
     const user = userEvent.setup();
     render(
