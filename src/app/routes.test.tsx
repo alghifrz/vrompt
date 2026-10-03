@@ -130,7 +130,7 @@ describe("public routes", () => {
 
   it("explains that authentication is not configured", () => {
     render(<SignInPage />);
-    expect(screen.getByRole("heading", { name: "Sign in" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /Welcome/ })).toBeInTheDocument();
     expect(
       screen.getByText(/Authentication is not configured/),
     ).toBeInTheDocument();
@@ -141,7 +141,7 @@ describe("public routes", () => {
   it("renders the sign-up page", () => {
     render(<SignUpPage />);
     expect(
-      screen.getByRole("heading", { name: "Create an account" }),
+      screen.getByRole("heading", { name: /Start with a/ }),
     ).toBeInTheDocument();
   });
 
