@@ -1,8 +1,10 @@
 import { ClerkProvider } from "@clerk/nextjs";
 import type { Metadata } from "next";
 import { Geist_Mono, Instrument_Serif, Space_Grotesk } from "next/font/google";
+import { headers } from "next/headers";
 import type { ReactNode } from "react";
 import { clerkAppearance } from "../components/auth/clerk-appearance";
+import { resolveClerkProxyUrl } from "../server/auth/clerk-proxy";
 import "./globals.css";
 
 const spaceGrotesk = Space_Grotesk({
@@ -35,7 +37,21 @@ export const metadata: Metadata = {
   },
 };
 
-export default function RootLayout({
+async function requestOrigin() {
+  const headerList = await headers();
+  const host = headerList.get("x-forwarded-host") ?? headerList.get("host");
+  if (!host) {
+    return undefined;
+  }
+
+  const protocol =
+    headerList.get("x-forwarded-proto") ??
+    (host.startsWith("localhost") ? "http" : "https");
+
+  return `${protocol}://${host}`;
+}
+
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: ReactNode;
@@ -53,6 +69,8 @@ export default function RootLayout({
     return tree;
   }
 
+  const proxyUrl = resolveClerkProxyUrl(await requestOrigin());
+
   return (
     <ClerkProvider
       appearance={clerkAppearance}
@@ -61,6 +79,7 @@ export default function RootLayout({
       signInFallbackRedirectUrl="/start"
       signUpFallbackRedirectUrl="/start"
       afterSignOutUrl="/"
+      {...(proxyUrl ? { proxyUrl } : {})}
     >
       {tree}
     </ClerkProvider>

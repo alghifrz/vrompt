@@ -1,5 +1,6 @@
 import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
+import { shouldProxyClerkFrontendApi } from "./server/auth/clerk-proxy";
 
 // Next.js 16 may warn that middleware.ts is moving toward proxy.ts.
 // Clerk 7 still authenticates through clerkMiddleware. Do not rename this
@@ -18,13 +19,20 @@ const isProtected = createRouteMatcher([
 ]);
 
 export default clerkEnabled
-  ? clerkMiddleware(async (auth, request) => {
-      if (isProtected(request)) {
-        await auth.protect({
-          unauthenticatedUrl: new URL("/sign-in", request.url).toString(),
-        });
-      }
-    })
+  ? clerkMiddleware(
+      async (auth, request) => {
+        if (isProtected(request)) {
+          await auth.protect({
+            unauthenticatedUrl: new URL("/sign-in", request.url).toString(),
+          });
+        }
+      },
+      {
+        frontendApiProxy: {
+          enabled: shouldProxyClerkFrontendApi(),
+        },
+      },
+    )
   : function middleware() {
       return NextResponse.next();
     };
@@ -33,5 +41,7 @@ export const config = {
   matcher: [
     "/((?!_next|[^?]*\\.(?:html?|css|js(?!on)|jpe?g|webp|png|gif|svg|ttf|woff2?|ico|csv|docx?|xlsx?|zip|webmanifest)).*)",
     "/(api|trpc)(.*)",
+    // clerk.browser.js is otherwise skipped by the static-file exception above.
+    "/__clerk/(.*)",
   ],
 };
