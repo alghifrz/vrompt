@@ -85,16 +85,10 @@ function FlowPreview() {
 
 /* ---------- Toggle Sign in / Create account ---------- */
 
-function ModeToggle({
-  isSignUp,
-  onSelect,
-}: {
-  isSignUp: boolean;
-  onSelect: (signUp: boolean) => void;
-}) {
+function ModeToggle({ isSignUp }: { isSignUp: boolean }) {
   const tabs = [
-    { href: "/sign-in", label: "Sign in", signUp: false, active: !isSignUp },
-    { href: "/sign-up", label: "Create account", signUp: true, active: isSignUp },
+    { href: "/sign-in", label: "Sign in", active: !isSignUp },
+    { href: "/sign-up", label: "Create account", active: isSignUp },
   ] as const;
 
   return (
@@ -112,19 +106,6 @@ function ModeToggle({
               ? "bg-[#d4f26a] text-[#14160c] shadow-[0_0_20px_-4px_rgba(212,242,106,0.7)]"
               : "text-white/55 hover:text-white"
           }`}
-          onClick={(event) => {
-            if (
-              event.metaKey ||
-              event.ctrlKey ||
-              event.shiftKey ||
-              event.altKey ||
-              event.button !== 0
-            ) {
-              return;
-            }
-            event.preventDefault();
-            onSelect(tab.signUp);
-          }}
         >
           {tab.label}
         </Link>
@@ -138,11 +119,9 @@ function ModeToggle({
 function AuthCard({
   clerkEnabled,
   isSignUp,
-  onSelect,
 }: {
   clerkEnabled: boolean;
   isSignUp: boolean;
-  onSelect: (signUp: boolean) => void;
 }) {
   const enabled = useLandingMotion();
   const mx = useMotionValue(-400);
@@ -166,21 +145,6 @@ function AuthCard({
       <div className="rounded-[34px] bg-gradient-to-b from-white/20 via-white/[0.06] to-[#d4f26a]/25 p-px">
         <section
           onMouseMove={enabled ? onMove : undefined}
-          onClick={(event) => {
-            const href = (event.target as HTMLElement)
-              .closest("a")
-              ?.getAttribute("href")
-              ?.split("?")[0];
-            if (href === "/sign-up" && !isSignUp) {
-              event.preventDefault();
-              onSelect(true);
-              return;
-            }
-            if (href === "/sign-in" && isSignUp) {
-              event.preventDefault();
-              onSelect(false);
-            }
-          }}
           className="group relative overflow-hidden rounded-[33px] bg-[#121212] p-5 sm:p-8"
         >
           <div
@@ -200,7 +164,7 @@ function AuthCard({
           />
 
           <div className="relative flex flex-wrap items-center justify-between gap-3">
-            <ModeToggle isSignUp={isSignUp} onSelect={onSelect} />
+            <ModeToggle isSignUp={isSignUp} />
             <span className="inline-flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-widest text-white/35">
               <span aria-hidden="true" className="size-1.5 animate-pulse rounded-full bg-[#d4f26a]" />
               Free in beta
@@ -212,12 +176,18 @@ function AuthCard({
               <div className="flex justify-center">
                 {isSignUp ? (
                   <SignUp
+                    key="sign-up"
+                    routing="path"
+                    path="/sign-up"
                     signInUrl="/sign-in"
                     fallbackRedirectUrl="/start"
                     forceRedirectUrl="/start"
                   />
                 ) : (
                   <SignIn
+                    key="sign-in"
+                    routing="path"
+                    path="/sign-in"
                     signUpUrl="/sign-up"
                     fallbackRedirectUrl="/start"
                     forceRedirectUrl="/start"
@@ -255,15 +225,6 @@ function AuthCard({
 
 /* ---------- Screen ---------- */
 
-function syncAuthUrl(signUp: boolean) {
-  const path = signUp ? "/sign-up" : "/sign-in";
-  if (window.location.pathname === path) {
-    return;
-  }
-  window.history.replaceState(window.history.state, "", path);
-  document.title = signUp ? "Sign up | Vrompt" : "Sign in | Vrompt";
-}
-
 export function SignInScreen({
   clerkEnabled,
   mode = "sign-in",
@@ -271,16 +232,7 @@ export function SignInScreen({
   clerkEnabled: boolean;
   mode?: "sign-in" | "sign-up";
 }) {
-  const [isSignUp, setIsSignUp] = useState(mode === "sign-up");
-
-  useEffect(() => {
-    setIsSignUp(mode === "sign-up");
-  }, [mode]);
-
-  function selectMode(nextSignUp: boolean) {
-    setIsSignUp(nextSignUp);
-    syncAuthUrl(nextSignUp);
-  }
+  const isSignUp = mode === "sign-up";
 
   return (
     <div className={`${landingShellClass} relative flex min-h-full flex-1 flex-col overflow-hidden`}>
@@ -359,11 +311,7 @@ export function SignInScreen({
           </div>
         </div>
 
-        <AuthCard
-          clerkEnabled={clerkEnabled}
-          isSignUp={isSignUp}
-          onSelect={selectMode}
-        />
+        <AuthCard clerkEnabled={clerkEnabled} isSignUp={isSignUp} />
       </main>
     </div>
   );

@@ -1,7 +1,6 @@
 /** @vitest-environment jsdom */
 
 import { render, screen } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { SignInScreen } from "./sign-in-screen";
@@ -31,14 +30,23 @@ vi.mock("../landing/motion", () => ({
 }));
 
 describe("sign-in screen", () => {
-  it("switches to sign-up on the same screen", async () => {
-    const user = userEvent.setup();
+  it("links to the sign-up route so Clerk can mount on /sign-up", () => {
     render(<SignInScreen clerkEnabled />);
 
     expect(screen.getByText("Clerk sign-in")).toBeInTheDocument();
-    await user.click(screen.getByRole("link", { name: "Create account" }));
+    expect(screen.getByRole("link", { name: "Create account" })).toHaveAttribute(
+      "href",
+      "/sign-up",
+    );
+  });
+
+  it("renders the Clerk sign-up form on the sign-up route", () => {
+    render(<SignInScreen clerkEnabled mode="sign-up" />);
 
     expect(screen.getByText("Clerk sign-up")).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: /Start with a/ })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Sign in" })).toHaveAttribute(
+      "href",
+      "/sign-in",
+    );
   });
 });
