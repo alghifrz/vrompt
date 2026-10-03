@@ -86,6 +86,30 @@ describe("interview infer", () => {
     });
   });
 
+  it("expands a bookstore answer into several first-version features", () => {
+    const spec = {
+      ...createInitialProjectSpec(),
+      project: {
+        ...createInitialProjectSpec().project,
+        name: "Toko Buku",
+        description: "Aplikasi untuk pemilik toko buku.",
+        problem: "Penjualan dan stok masih dicatat manual.",
+        targetUsers: ["Pemilik toko buku"],
+        type: "web application",
+      },
+    };
+    const patch = inferPhasePatch(
+      "features",
+      "pembayaran lewat rekening tetap aja kali ya",
+      spec,
+    );
+
+    expect((patch?.features?.length ?? 0) >= 4).toBe(true);
+    expect(patch?.features?.some((feature) => /katalog|stok|penjualan|pelanggan/i.test(feature.name))).toBe(
+      true,
+    );
+  });
+
   it("recommends attendance tables instead of Item", () => {
     const spec = {
       ...createInitialProjectSpec(),

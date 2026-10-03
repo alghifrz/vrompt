@@ -3,6 +3,9 @@ import {
   buildDomainModel,
   isPlaceholderApiPath,
   isPlaceholderEntityName,
+  isWeakDatabase,
+  recommendedFeatures,
+  shouldExpandFeatures,
   specLanguage,
   type DomainModel,
   type SpecLanguage,
@@ -81,13 +84,15 @@ export function buildPrdView(spec: ProjectSpec): PrdView {
       goals: user.goals,
       permissions: user.permissions,
     })),
-    features: (spec.features ?? []).map((feature) => ({
-      name: feature.name,
-      description: feature.description,
-      priority: feature.priority,
-      status: feature.status,
-      acceptance: feature.acceptanceCriteria,
-    })),
+    features: (shouldExpandFeatures(spec) ? recommendedFeatures(spec) : spec.features ?? []).map(
+      (feature) => ({
+        name: feature.name,
+        description: feature.description,
+        priority: feature.priority,
+        status: feature.status,
+        acceptance: feature.acceptanceCriteria,
+      }),
+    ),
     stack: stackItems(spec),
     architectureStyle: spec.architecture?.style,
     components: (spec.architecture?.components ?? []).map((item) => item.name),
@@ -101,7 +106,9 @@ export function buildErdView(spec: ProjectSpec): ErdView {
   const domain = buildDomainModel(spec);
   const fromSpec = spec.database?.entities ?? [];
   const inferred =
-    fromSpec.length === 0 || fromSpec.every((entity) => isPlaceholderEntityName(entity.name));
+    fromSpec.length === 0 ||
+    fromSpec.every((entity) => isPlaceholderEntityName(entity.name)) ||
+    isWeakDatabase(spec);
   const raw = inferred ? domainEntities(spec, domain) : specEntities(spec, domain);
   const entities = applyRelationshipKeys(raw, spec, domain);
   const entityIds = new Set(entities.map((entity) => entity.id));
@@ -531,9 +538,12 @@ function specEntities(spec: ProjectSpec, domain: DomainModel): ErdEntityView[] {
 }
 
 function domainEntities(spec: ProjectSpec, domain: DomainModel): ErdEntityView[] {
-  const nouns = [domain.actor, domain.subject, domain.record].filter(
-    (noun): noun is NonNullable<typeof noun> => Boolean(noun),
-  );
+  const nouns =
+    domain.entities.length > 0
+      ? domain.entities
+      : [domain.actor, domain.subject, domain.record].filter(
+          (noun): noun is NonNullable<typeof noun> => Boolean(noun),
+        );
   const entities: ErdEntityView[] = nouns.map((noun) => ({
     id: mermaidId(noun.name),
     name: noun.name,
@@ -754,7 +764,112 @@ function fieldsForNoun(
     );
   }
 
+  if (domain.theme === "commerce") {
+    return commerceFields(noun, domain);
+  }
+
   return inferFields(noun.name, noun.description, domain);
+}
+
+function commerceFields(noun: DomainModel["actor"], domain: DomainModel): DocField[] {
+  const idNotes = domain.language === "id";
+  const stamp = [
+    field("datetime", "createdAt", {
+      notes: idNotes ? "Waktu baris dibuat." : "Row created at.",
+    }),
+    field("datetime", "updatedAt", {
+      notes: idNotes ? "Waktu terakhir diubah." : "Last update time.",
+    }),
+  ];
+  const id = field("string", "id", {
+    key: "PK",
+    notes: idNotes ? `Kunci utama ${noun.name}.` : `Primary key for ${noun.name}.`,
+  });
+
+  if (noun.kind === "actor") {
+    return uniqueFields(
+      [
+        id,
+        field("string", "name", { notes: idNotes ? "Nama pemilik." : "Owner display name." }),
+        field("string", "email", { notes: idNotes ? "Email untuk masuk." : "Sign-in email." }),
+        ...stamp,
+      ],
+      noun.id,
+    );
+  }
+
+  if (/buku|book|produk|product/i.test(noun.name)) {
+    return uniqueFields(
+      [
+        id,
+        field("string", "title", { notes: idNotes ? "Judul yang tampil di katalog." : "Catalog title." }),
+        field("string", "author", {
+          required: false,
+          notes: idNotes ? "Penulis, jika relevan." : "Author, if relevant.",
+        }),
+        field("number", "price", { notes: idNotes ? "Harga jual." : "Selling price." }),
+        field("number", "stock", { notes: idNotes ? "Jumlah stok tersedia." : "Units in stock." }),
+        ...stamp,
+      ],
+      noun.id,
+    );
+  }
+
+  if (/pelanggan|customer/i.test(noun.name)) {
+    return uniqueFields(
+      [
+        id,
+        field("string", "name", { notes: idNotes ? "Nama pelanggan." : "Customer name." }),
+        field("string", "phone", {
+          required: false,
+          notes: idNotes ? "Nomor yang bisa dihubungi." : "Contact number.",
+        }),
+        ...stamp,
+      ],
+      noun.id,
+    );
+  }
+
+  if (/itempesanan|orderitem/i.test(noun.name)) {
+    return uniqueFields(
+      [
+        id,
+        field("number", "quantity", { notes: idNotes ? "Jumlah yang dibeli." : "Quantity bought." }),
+        field("number", "unitPrice", { notes: idNotes ? "Harga saat transaksi." : "Price at sale time." }),
+        ...stamp,
+      ],
+      noun.id,
+    );
+  }
+
+  if (/pembayaran|payment/i.test(noun.name)) {
+    return uniqueFields(
+      [
+        id,
+        field("string", "method", {
+          notes: idNotes ? "Metode, misalnya transfer atau QR." : "Method, for example transfer or QR.",
+        }),
+        field("string", "status", { notes: idNotes ? "menunggu, lunas, atau gagal." : "pending, paid, or failed." }),
+        field("number", "amount", { notes: idNotes ? "Nominal yang dibayar." : "Amount paid." }),
+        field("string", "accountNumber", {
+          required: false,
+          notes: idNotes ? "Nomor rekening tujuan." : "Destination account number.",
+        }),
+        ...stamp,
+      ],
+      noun.id,
+    );
+  }
+
+  return uniqueFields(
+    [
+      id,
+      field("string", "status", { notes: idNotes ? "Status pesanan." : "Order status." }),
+      field("number", "total", { notes: idNotes ? "Total belanja." : "Order total." }),
+      ...stamp,
+    ],
+    noun.id,
+  );
 }
 
 function inferFields(
@@ -980,6 +1095,15 @@ function usableRelationships(
 }
 
 function domainRelationships(domain: DomainModel): ErdLinkView[] {
+  if (domain.relationships.length > 0) {
+    return domain.relationships.map((rel) => ({
+      from: mermaidId(rel.from),
+      to: mermaidId(rel.to),
+      kind: rel.type,
+      label: rel.description,
+    }));
+  }
+
   const id = domain.language === "id";
   const links: ErdLinkView[] = [];
   if (domain.subject) {

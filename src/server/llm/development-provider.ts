@@ -7,6 +7,7 @@ import {
   specToRewritePatch,
 } from "../../core/interview/rewrite";
 import { ProjectSpecSchema } from "../../core/schema/project-spec";
+import { recommendedDatabase, recommendedFeatures } from "../../core/spec/domain";
 import { hasStructuredStack, interpretStackAnswer } from "../../core/spec/stack";
 
 /**

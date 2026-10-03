@@ -8,7 +8,13 @@ function phaseGuidance(phase: InterviewPhase): string {
     case "goals":
       return "Capture the main outcome. Do not ask for a second goal if one is already clear.";
     case "features":
-      return "Capture the first must-have capability. Do not keep asking for more features.";
+      return [
+        "Act as a senior product engineer. From the idea and this answer, write a first-version feature catalog, not one copied sentence.",
+        "Include 4-6 capabilities a working v1 needs for this kind of product. Example: a bookstore needs catalog, stock, sales, payment, and customers.",
+        "Keep the user's named capability as a must-have. Add the implied must-haves around it. Mark extras as should.",
+        "Each feature needs a short name, a clear description, and one acceptance line. Same language as the user.",
+        "Do not ask for more features. Put the full catalog in the patch and move on.",
+      ].join(" ");
     case "users":
       return "Capture who it is for. One user type is enough.";
     case "stack":
@@ -23,7 +29,12 @@ function phaseGuidance(phase: InterviewPhase): string {
     case "architecture":
       return "If they do not know, recommend a modular monolith and say why: one deployable app is easier for a first version.";
     case "database":
-      return "If they do not know, recommend a small Postgres schema and say why: structured data and easy to grow later.";
+      return [
+        "Act as a senior data modeler. Infer a real first-version schema from the product and features, not from feature titles.",
+        "A shop needs tables such as product/book, customer, order, order item, and payment — never only the owner persona plus one feature name.",
+        "Give each entity a noun name and a data-focused description. Add the obvious one-to-many relationships.",
+        "If they do not know, still write that schema and say it is a small Postgres start that can grow.",
+      ].join(" ");
     case "api":
       return "If they do not know, recommend a small authenticated HTTP API and say why: the web app can reuse it later.";
     case "security":
@@ -44,7 +55,7 @@ export function buildInterviewSystemPrompt(phase: InterviewPhase): string {
     "Collect facts for a ProjectSpec. You do not write application code.",
     "Interpret the current answer into the correct structured fields, then move on.",
     "Ask one focused question at a time. Never repeat the same question or the same topic.",
-    "Do not invent product facts the user has not given.",
+    "Do not invent a different product. You MAY infer implied first-version features and tables that a software engineer would include for this kind of app.",
     "Never paste the user's raw chat wording into ProjectSpec fields.",
     "Rewrite slang and run-on answers into short, readable spec language in the same language.",
     "Product name: 1-4 words. Description and problem: complete sentences, not the same dump.",
@@ -97,6 +108,8 @@ export function buildInterviewUserPrompt(
     "Write a complete patch for this phase from the answer or your recommendation.",
     "Patch values must be rewritten spec language, never a verbatim user sentence.",
     "For stack answers, put each technology in frontend, backend, database, authentication, or hosting. Do not put a spoken sentence in additional.",
+    "For features, write a small complete first-version catalog inferred from the product, not a single chat sentence.",
+    "For database, write real nouns and relationships. Do not copy a persona or a feature title as the only tables.",
     "The next QUESTION must be for the following topic, not a follow-up in this phase.",
     "Do not redefine the phase.",
   ].join("\n");

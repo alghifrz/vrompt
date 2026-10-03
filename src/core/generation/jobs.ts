@@ -3,6 +3,8 @@ import {
   buildDomainModel,
   isPlaceholderApiPath,
   isPlaceholderEntityName,
+  recommendedFeatures,
+  shouldExpandFeatures,
   specLanguage,
   type DomainModel,
 } from "../spec/domain";
@@ -310,7 +312,8 @@ function featuresByPriority(
   spec: ProjectSpec,
   priority: Feature["priority"],
 ): Feature[] {
-  return (spec.features ?? [])
+  const features = shouldExpandFeatures(spec) ? recommendedFeatures(spec) : spec.features ?? [];
+  return features
     .filter((feature) => feature.priority === priority)
     .sort((left, right) => left.id.localeCompare(right.id));
 }

@@ -214,6 +214,43 @@ describe("generation docs", () => {
     expect(prd).toContain("hadir, izin, sakit, atau alpha");
   });
 
+  it("builds a bookstore ERD from the product, not from one feature title", () => {
+    const erd = buildErdView({
+      project: {
+        name: "Toko Buku",
+        description: "Aplikasi web untuk pemilik toko buku.",
+        problem: "Penjualan masih dicatat manual.",
+        targetUsers: ["Pemilik toko buku"],
+        type: "web application",
+        status: "ready",
+      },
+      features: [
+        {
+          id: "feature-1",
+          name: "Pembayaran via Rekening Tetap",
+          description: "Bayar lewat rekening tetap.",
+          priority: "must",
+          status: "planned",
+          acceptanceCriteria: [],
+        },
+      ],
+      users: [
+        {
+          id: "user-1",
+          name: "Penjual Toko Buku",
+          description: "Pemilik toko.",
+          goals: ["Jualan"],
+          permissions: ["use-app"],
+        },
+      ],
+    });
+
+    const names = erd.entities.map((entity) => entity.name);
+    expect(names).toEqual(expect.arrayContaining(["Buku", "Pesanan", "Pembayaran", "Pelanggan"]));
+    expect(names).not.toContain("Pembayaran via Rekening Tetap");
+    expect(erd.links.length).toBeGreaterThanOrEqual(4);
+  });
+
   it("includes PRD.md and ERD.md", () => {
     const files = renderDocFiles(spec);
 

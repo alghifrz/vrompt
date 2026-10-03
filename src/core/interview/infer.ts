@@ -1,5 +1,11 @@
 import type { ProjectSpec } from "../schema/project-spec";
-import { buildDomainModel } from "../spec/domain";
+import {
+  buildDomainModel,
+  isWeakDatabase,
+  recommendedDatabase,
+  recommendedFeatures,
+  shouldExpandFeatures,
+} from "../spec/domain";
 import { interpretStackAnswer } from "../spec/stack";
 import {
   INITIAL_PROJECT,
@@ -159,21 +165,10 @@ export function inferPhasePatch(
         },
       };
     case "features":
-      if (spec.features?.length) {
+      if (spec.features && spec.features.length > 0 && !shouldExpandFeatures(spec, text)) {
         return undefined;
       }
-      return {
-        features: [
-          {
-            id: "feature-1",
-            name: inferName(text) || "Core feature",
-            description: text,
-            priority: "must",
-            status: "planned",
-            acceptanceCriteria: [],
-          },
-        ],
-      };
+      return { features: recommendedFeatures(spec, text) };
     case "users":
       if (spec.users?.length) {
         return undefined;
@@ -205,10 +200,10 @@ export function inferPhasePatch(
       }
       return { architecture: { constraints: [clip(text, 160)] } };
     case "database":
-      if (hasDatabase(spec)) {
+      if (hasDatabase(spec) && !isWeakDatabase(spec)) {
         return undefined;
       }
-      return { database: { constraints: [clip(text, 160)] } };
+      return { database: recommendedDatabase(spec) };
     case "security":
       if (hasSecurity(spec)) {
         return undefined;
@@ -255,7 +250,7 @@ export function recommendPhasePatch(
         },
       };
     case "database":
-      if (hasDatabase(spec)) {
+      if (hasDatabase(spec) && !isWeakDatabase(spec)) {
         return undefined;
       }
       return {
@@ -309,45 +304,3 @@ export function recommendPhasePatch(
   }
 }
 
-function recommendedDatabase(spec: ProjectSpec): NonNullable<ProjectSpecPatch["database"]> {
-  const domain = buildDomainModel(spec);
-  const nouns = [domain.actor, domain.subject, domain.record].filter(
-    (noun): noun is NonNullable<typeof noun> => Boolean(noun),
-  );
-  const relationships = [
-    domain.subject
-      ? {
-          from: domain.subject.name,
-          to: domain.record.name,
-          type: "one-to-many",
-          description:
-            domain.language === "id"
-              ? `${domain.subject.name} punya banyak ${domain.record.name}.`
-              : `${domain.subject.name} has many ${domain.record.name} rows.`,
-        }
-      : undefined,
-    {
-      from: domain.actor.name,
-      to: domain.record.name,
-      type: "one-to-many",
-      description:
-        domain.language === "id"
-          ? `${domain.actor.name} mencatat ${domain.record.name}.`
-          : `${domain.actor.name} creates ${domain.record.name} rows.`,
-    },
-  ].filter((item): item is NonNullable<typeof item> => Boolean(item));
-
-  return {
-    entities: nouns.map((noun, index) => ({
-      id: `entity-${String(index + 1)}`,
-      name: noun.name,
-      description: noun.description,
-    })),
-    relationships,
-    constraints: [
-      domain.language === "id"
-        ? `Mulai dari skema kecil untuk ${spec.project.name}. Jangan tambah tabel di luar model ini.`
-        : `Start with a small schema for ${spec.project.name}. Do not add tables outside this model.`,
-    ],
-  };
-}

@@ -1,5 +1,11 @@
 import type { LLMProvider } from "../llm/types";
 import type { ProjectSpec } from "../schema/project-spec";
+import {
+  isWeakDatabase,
+  recommendedDatabase,
+  recommendedFeatures,
+  shouldExpandFeatures,
+} from "../spec/domain";
 import { looksLikeStackDump, rescueStack } from "../spec/stack";
 import { parseInterviewResponse } from "./extraction";
 import { commitProjectSpecPatch } from "./merge";
@@ -73,6 +79,10 @@ export function needsSpecRewrite(spec: ProjectSpec): boolean {
   }
 
   if (looksLikeStackDump(spec.stack)) {
+    return true;
+  }
+
+  if (shouldExpandFeatures(spec) || isWeakDatabase(spec)) {
     return true;
   }
 
@@ -198,13 +208,24 @@ function polishProject(project: ProjectSpec["project"]): ProjectSpec["project"] 
 /** Deterministic cleanup when the model is unavailable or still copies slang. */
 export function polishSpecLocally(spec: ProjectSpec): ProjectSpec {
   const stack = spec.stack ? rescueStack(spec.stack) : spec.stack;
-  if (!needsSpecRewrite(spec) && !looksLikeStackDump(spec.stack)) {
+  const features = shouldExpandFeatures(spec)
+    ? recommendedFeatures(spec)
+    : spec.features;
+  const database = isWeakDatabase(spec) ? recommendedDatabase(spec) : spec.database;
+  if (
+    !needsSpecRewrite(spec) &&
+    !looksLikeStackDump(spec.stack) &&
+    features === spec.features &&
+    database === spec.database
+  ) {
     return stack === spec.stack ? spec : { ...spec, stack };
   }
 
   return {
     ...spec,
     stack,
+    ...(features ? { features } : {}),
+    ...(database ? { database } : {}),
     project: polishProject(spec.project),
     goals: spec.goals
       ? {
@@ -220,7 +241,7 @@ export function polishSpecLocally(spec: ProjectSpec): ProjectSpec {
           ),
         }
       : spec.goals,
-    features: spec.features?.map((feature) => ({
+    features: features?.map((feature) => ({
       ...feature,
       name:
         looksLikeCasualSpeech(feature.name) || feature.name === feature.description

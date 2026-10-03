@@ -13,6 +13,12 @@ import {
   recommendationNote,
   PHASE_OPENERS,
 } from "./infer";
+import {
+  isWeakDatabase,
+  recommendedDatabase,
+  recommendedFeatures,
+  shouldExpandFeatures,
+} from "../spec/domain";
 import { interpretStackAnswer } from "../spec/stack";
 import { commitProjectSpecPatch } from "./merge";
 import {
@@ -377,6 +383,30 @@ export class InterviewEngine {
           spec = committed.spec;
           extracted = true;
           patch = { ...patch, stack };
+        }
+      }
+    }
+
+    if (session.phase === "features" && userAnswer !== undefined && !skipRequested) {
+      if (shouldExpandFeatures(spec, userAnswer)) {
+        const features = recommendedFeatures(spec, userAnswer);
+        const committed = commitProjectSpecPatch(spec, { features });
+        if (committed.ok) {
+          spec = committed.spec;
+          extracted = true;
+          patch = { ...patch, features };
+        }
+      }
+    }
+
+    if (session.phase === "database" && userAnswer !== undefined && !skipRequested) {
+      if (isWeakDatabase(spec)) {
+        const database = recommendedDatabase(spec);
+        const committed = commitProjectSpecPatch(spec, { database });
+        if (committed.ok) {
+          spec = committed.spec;
+          extracted = true;
+          patch = { ...patch, database };
         }
       }
     }
