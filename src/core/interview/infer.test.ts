@@ -62,6 +62,20 @@ describe("interview infer", () => {
     ]);
   });
 
+  it("maps a casual stack answer into frontend and backend", () => {
+    const patch = inferPhasePatch(
+      "stack",
+      "untuk fe gw mau pakai react aja, trus backend pakai golang",
+      createInitialProjectSpec(),
+    );
+
+    expect(patch?.stack).toMatchObject({
+      frontend: "React",
+      backend: "Go",
+    });
+    expect(patch?.stack?.additional ?? []).toEqual([]);
+  });
+
   it("recommends a beginner stack when the user does not know", () => {
     const patch = recommendPhasePatch("stack", createInitialProjectSpec());
 

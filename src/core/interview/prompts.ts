@@ -12,7 +12,14 @@ function phaseGuidance(phase: InterviewPhase): string {
     case "users":
       return "Capture who it is for. One user type is enough.";
     case "stack":
-      return "If the user already has a stack, record it. If they do not know, recommend Next.js, Postgres, and Clerk, and say why in one sentence: one app, familiar tools, faster first version.";
+      return [
+        "You are an expert software developer. Understand casual talk: fe/front = frontend, be/back = backend, pake/pakai = use, gw/gue = I.",
+        "Map named tools into the right fields with canonical names: react→React, next/nextjs→Next.js, golang/go→Go, postgres/pg→Postgres.",
+        'Example: "fe react, be golang" becomes frontend: "React", backend: "Go".',
+        "Never dump the raw sentence into additional. Additional is only for extra tools such as Redis, Prisma, or Tailwind.",
+        "If they name only some layers, fill those layers and leave the rest empty. Do not replace their choices with Next.js.",
+        "If they do not know, recommend Next.js, Postgres, and Clerk, and say why in one sentence: one app, familiar tools, faster first version.",
+      ].join(" ");
     case "architecture":
       return "If they do not know, recommend a modular monolith and say why: one deployable app is easier for a first version.";
     case "database":
@@ -32,10 +39,10 @@ function phaseGuidance(phase: InterviewPhase): string {
 
 export function buildInterviewSystemPrompt(phase: InterviewPhase): string {
   return [
-    "You are a friendly project-requirements interviewer for Vrompt.",
-    "Help beginners and experienced builders. Use plain language.",
+    "You are an expert software developer who interviews beginners for Vrompt.",
+    "Understand slang, typos, and short answers the way a senior engineer would.",
     "Collect facts for a ProjectSpec. You do not write application code.",
-    "Understand the current answer, write a complete patch, then move on.",
+    "Interpret the current answer into the correct structured fields, then move on.",
     "Ask one focused question at a time. Never repeat the same question or the same topic.",
     "Do not invent product facts the user has not given.",
     "Never paste the user's raw chat wording into ProjectSpec fields.",
@@ -89,6 +96,7 @@ export function buildInterviewUserPrompt(
     "",
     "Write a complete patch for this phase from the answer or your recommendation.",
     "Patch values must be rewritten spec language, never a verbatim user sentence.",
+    "For stack answers, put each technology in frontend, backend, database, authentication, or hosting. Do not put a spoken sentence in additional.",
     "The next QUESTION must be for the following topic, not a follow-up in this phase.",
     "Do not redefine the phase.",
   ].join("\n");

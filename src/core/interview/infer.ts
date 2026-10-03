@@ -1,5 +1,6 @@
 import type { ProjectSpec } from "../schema/project-spec";
 import { buildDomainModel } from "../spec/domain";
+import { interpretStackAnswer } from "../spec/stack";
 import {
   INITIAL_PROJECT,
   hasArchitecture,
@@ -188,11 +189,16 @@ export function inferPhasePatch(
           },
         ],
       };
-    case "stack":
+    case "stack": {
+      const stack = interpretStackAnswer(text, spec.stack);
+      if (stack.frontend || stack.backend || stack.database || stack.authentication || stack.hosting) {
+        return { stack };
+      }
       if (hasStack(spec)) {
         return undefined;
       }
-      return { stack: { additional: [clip(text, 120)] } };
+      return { stack };
+    }
     case "architecture":
       if (hasArchitecture(spec)) {
         return undefined;

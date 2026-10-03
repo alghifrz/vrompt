@@ -1,5 +1,6 @@
 import type { LLMProvider } from "../llm/types";
 import type { ProjectSpec } from "../schema/project-spec";
+import { looksLikeStackDump, rescueStack } from "../spec/stack";
 import { parseInterviewResponse } from "./extraction";
 import { commitProjectSpecPatch } from "./merge";
 import { INITIAL_PROJECT } from "./phases";
@@ -71,6 +72,10 @@ export function needsSpecRewrite(spec: ProjectSpec): boolean {
     return true;
   }
 
+  if (looksLikeStackDump(spec.stack)) {
+    return true;
+  }
+
   return false;
 }
 
@@ -83,6 +88,7 @@ export function buildSpecRewriteSystemPrompt(): string {
     "Write description, problem, goals, features, and users as complete, readable sentences.",
     "Keep the same language as the draft (Indonesian stays Indonesian).",
     "Preserve ids, priority, status, type, and technical sections you are not rewriting.",
+    "If stack.additional is a spoken sentence about frontend or backend, map the tools into frontend/backend/database/authentication/hosting. Never leave slang in additional.",
     "Respond only in this format:",
     "",
     "<structured>",
@@ -191,12 +197,14 @@ function polishProject(project: ProjectSpec["project"]): ProjectSpec["project"] 
 
 /** Deterministic cleanup when the model is unavailable or still copies slang. */
 export function polishSpecLocally(spec: ProjectSpec): ProjectSpec {
-  if (!needsSpecRewrite(spec)) {
-    return spec;
+  const stack = spec.stack ? rescueStack(spec.stack) : spec.stack;
+  if (!needsSpecRewrite(spec) && !looksLikeStackDump(spec.stack)) {
+    return stack === spec.stack ? spec : { ...spec, stack };
   }
 
   return {
     ...spec,
+    stack,
     project: polishProject(spec.project),
     goals: spec.goals
       ? {
@@ -244,6 +252,7 @@ export function specToRewritePatch(spec: ProjectSpec): ProjectSpecPatch {
     ...(spec.goals ? { goals: spec.goals } : {}),
     ...(spec.features ? { features: spec.features } : {}),
     ...(spec.users ? { users: spec.users } : {}),
+    ...(spec.stack ? { stack: spec.stack } : {}),
   };
 }
 

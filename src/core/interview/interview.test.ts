@@ -481,6 +481,38 @@ describe("InterviewEngine", () => {
       expect(session.spec.users).toHaveLength(1);
     });
 
+    it("interprets casual stack talk even if the model dumps it into additional", async () => {
+      const { session } = await runScriptedTurns(
+        [
+          "idea",
+          "goals",
+          "features",
+          "users",
+          "untuk fe gw mau pakai react aja, trus backend pakai golang",
+        ],
+        [
+          structuredResponse("Goals?", { patch: discoveryPatch }),
+          structuredResponse("Features?", { patch: goalsPatch }),
+          structuredResponse("Users?", { patch: featuresPatch }),
+          structuredResponse("Stack?", { patch: usersPatch }),
+          structuredResponse("Architecture?", {
+            patch: {
+              stack: {
+                additional: [
+                  "untuk fe gw mau pakai react aja, trus backend pakai golang",
+                ],
+              },
+            },
+          }),
+        ],
+      );
+
+      expect(session.spec.stack?.frontend).toBe("React");
+      expect(session.spec.stack?.backend).toBe("Go");
+      expect(session.spec.stack?.additional ?? []).toEqual([]);
+      expect(session.phase).toBe("architecture");
+    });
+
     it("completes stack when any stack field is present", async () => {
       const { session } = await runScriptedTurns(
         ["idea", "goals", "features", "users", "React"],

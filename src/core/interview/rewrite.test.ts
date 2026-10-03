@@ -70,6 +70,19 @@ describe("spec rewrite", () => {
     expect(buildSpecRewriteSystemPrompt()).toMatch(/short name/i);
   });
 
+  it("rescues a spoken stack dump into frontend and backend", () => {
+    const polished = polishSpecLocally({
+      ...rawSpec,
+      stack: {
+        additional: ["untuk fe gw mau pakai react aja, trus backend pakai golang"],
+      },
+    });
+
+    expect(polished.stack?.frontend).toBe("React");
+    expect(polished.stack?.backend).toBe("Go");
+    expect(polished.stack?.additional ?? []).toEqual([]);
+  });
+
   it("cleans identical slang dumps into distinct readable fields", () => {
     const polished = polishSpecLocally(rawSpec);
 

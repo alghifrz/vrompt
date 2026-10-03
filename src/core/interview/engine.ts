@@ -13,6 +13,7 @@ import {
   recommendationNote,
   PHASE_OPENERS,
 } from "./infer";
+import { interpretStackAnswer } from "../spec/stack";
 import { commitProjectSpecPatch } from "./merge";
 import {
   INITIAL_PROJECT,
@@ -364,6 +365,18 @@ export class InterviewEngine {
             patch = fallback;
             notedRecommendation = wantsHelp;
           }
+        }
+      }
+    }
+
+    if (session.phase === "stack" && userAnswer !== undefined && !skipRequested) {
+      const stack = interpretStackAnswer(userAnswer, spec.stack);
+      if (Object.keys(stack).length > 0) {
+        const committed = commitProjectSpecPatch(spec, { stack });
+        if (committed.ok) {
+          spec = committed.spec;
+          extracted = true;
+          patch = { ...patch, stack };
         }
       }
     }

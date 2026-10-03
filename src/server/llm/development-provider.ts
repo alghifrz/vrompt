@@ -7,6 +7,7 @@ import {
   specToRewritePatch,
 } from "../../core/interview/rewrite";
 import { ProjectSpecSchema } from "../../core/schema/project-spec";
+import { hasStructuredStack, interpretStackAnswer } from "../../core/spec/stack";
 
 /**
  * Server-side development interviewer.
@@ -120,21 +121,28 @@ function responseFor(phase: string, answer: string): string {
           ],
         },
       });
-    case "stack":
+    case "stack": {
+      const stack = interpretStackAnswer(text);
+      const known = hasStructuredStack(stack);
       return structured(
-        "I recommend Next.js, Postgres, and Clerk because you can ship one app first. Any architecture preference, or should I suggest a simple starting shape?",
+        known
+          ? "Any architecture preference, or should I suggest a simple starting shape?"
+          : "I recommend Next.js, Postgres, and Clerk because you can ship one app first. Any architecture preference, or should I suggest a simple starting shape?",
         {
           patch: {
-            stack: {
-              frontend: "Next.js",
-              backend: "Next.js",
-              database: "Postgres",
-              authentication: "Clerk",
-              hosting: "Vercel",
-            },
+            stack: known
+              ? stack
+              : {
+                  frontend: "Next.js",
+                  backend: "Next.js",
+                  database: "Postgres",
+                  authentication: "Clerk",
+                  hosting: "Vercel",
+                },
           },
         },
       );
+    }
     case "architecture":
     case "database":
     case "api":
