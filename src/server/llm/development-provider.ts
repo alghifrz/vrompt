@@ -15,6 +15,7 @@ import { MockLLMProvider } from "../../core/llm/mock";
 import type { LLMProvider, LLMRequest } from "../../core/llm/types";
 import { ProjectSpecSchema } from "../../core/schema/project-spec";
 import { recommendedFeatures } from "../../core/spec/domain";
+import { clarifyingQuestion, needsClarification } from "../../core/interview/clarify";
 import { hasStructuredStack, interpretStackAnswer } from "../../core/spec/stack";
 
 /**
@@ -84,16 +85,31 @@ function responseFor(phase: string, answer: string, request?: LLMRequest): strin
     request && specFromInterviewPrompt(request.messages.at(-1)?.content ?? "");
 
   switch (phase as InterviewPhase) {
-    case "discovery":
+    case "discovery": {
       if (!answer) {
         return structured("What are you building?", { patch: {} });
+      }
+      const spec = knownSpec ?? createInitialProjectSpec();
+      if (needsClarification("discovery", text, spec)) {
+        return structured(clarifyingQuestion("discovery", text, spec), {
+          clarify: true,
+          patch: {},
+        });
       }
       return structured("What is the main outcome you want first?", {
         patch: {
           project: interpretDiscovery(answer),
         },
       });
-    case "goals":
+    }
+    case "goals": {
+      const spec = knownSpec ?? createInitialProjectSpec();
+      if (needsClarification("goals", text, spec)) {
+        return structured(clarifyingQuestion("goals", text, spec), {
+          clarify: true,
+          patch: {},
+        });
+      }
       return structured("Which capabilities matter most at launch?", {
         patch: {
           goals: {
@@ -107,8 +123,15 @@ function responseFor(phase: string, answer: string, request?: LLMRequest): strin
           },
         },
       });
+    }
     case "features": {
       const spec = knownSpec ?? createInitialProjectSpec();
+      if (needsClarification("features", text, spec)) {
+        return structured(clarifyingQuestion("features", text, spec), {
+          clarify: true,
+          patch: {},
+        });
+      }
       return structured("Who will use this product?", {
         patch: {
           features: recommendedFeatures(spec, text),
@@ -116,6 +139,13 @@ function responseFor(phase: string, answer: string, request?: LLMRequest): strin
       });
     }
     case "users": {
+      const spec = knownSpec ?? createInitialProjectSpec();
+      if (needsClarification("users", text, spec)) {
+        return structured(clarifyingQuestion("users", text, spec), {
+          clarify: true,
+          patch: {},
+        });
+      }
       const user = interpretUser(text, language);
       return structured("What technology stack are you using, if any?", {
         patch: {

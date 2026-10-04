@@ -4,6 +4,11 @@ import { ProjectSpecSchema, type ProjectSpec } from "../schema/project-spec";
 import { InterviewError, InterviewErrorCode } from "./errors";
 import { parseInterviewResponse } from "./extraction";
 import {
+  clarifyingQuestion,
+  productAnswerCorpus,
+  shouldClarifyPhase,
+} from "./clarify";
+import {
   inferPhasePatch,
   isAcceptanceAnswer,
   isExplicitSkipAnswer,
@@ -11,6 +16,7 @@ import {
   isUnsureAnswer,
   recommendPhasePatch,
   recommendationNote,
+  rewriteDiscoveryFromAnswer,
   PHASE_OPENERS,
 } from "./infer";
 import {
@@ -201,7 +207,12 @@ function nextQuestionText(
   previousPhase: InterviewPhase,
   next: InterviewPhase,
   modelQuestion?: string,
-  notedRecommendation = false,
+  extras: {
+    notedRecommendation?: boolean;
+    clarifying?: boolean;
+    answer?: string;
+    spec?: ProjectSpec;
+  } = {},
 ): string | undefined {
   if (next === "complete") {
     return undefined;
@@ -209,8 +220,15 @@ function nextQuestionText(
 
   if (next !== previousPhase) {
     const opener = PHASE_OPENERS[next];
-    const note = notedRecommendation ? recommendationNote(previousPhase) : "";
+    const note = extras.notedRecommendation ? recommendationNote(previousPhase) : "";
     return note ? `${note}\n\n${opener}` : opener;
+  }
+
+  if (extras.clarifying && extras.spec && extras.answer !== undefined) {
+    if (modelQuestion && !isSameTopic(modelQuestion, PHASE_OPENERS[next])) {
+      return modelQuestion;
+    }
+    return clarifyingQuestion(next, extras.answer, extras.spec);
   }
 
   return modelQuestion && !isSameTopic(modelQuestion, PHASE_OPENERS[next])
@@ -343,8 +361,18 @@ export class InterviewEngine {
     const skipRequested = isSkippable(session.phase) && userSkipped;
     let patch = extraction?.patch;
     let notedRecommendation = false;
+    const stayToClarify =
+      userAnswer !== undefined &&
+      !skipRequested &&
+      shouldClarifyPhase({
+        phase: session.phase,
+        answer: userAnswer,
+        spec,
+        session: next,
+        modelClarify: extraction?.clarify,
+      });
 
-    if (userAnswer !== undefined && !skipRequested) {
+    if (userAnswer !== undefined && !skipRequested && !stayToClarify) {
       const alreadySatisfied = isPhaseSatisfied(session.phase, spec, {
         skipped: skippedPhases.includes(session.phase),
         confirmed,
@@ -353,14 +381,20 @@ export class InterviewEngine {
       const wantsHelp =
         !isProductPhase(session.phase) &&
         (isUnsureAnswer(userAnswer) || isAcceptanceAnswer(userAnswer));
+      const inferSource =
+        isProductPhase(session.phase) ||
+        isAcceptanceAnswer(userAnswer) ||
+        isUnsureAnswer(userAnswer)
+          ? productAnswerCorpus(next, userAnswer) || userAnswer
+          : userAnswer;
 
       if (!alreadySatisfied || wantsHelp) {
         const fallback = isProductPhase(session.phase)
-          ? inferPhasePatch(session.phase, userAnswer, spec)
+          ? inferPhasePatch(session.phase, inferSource, spec)
           : wantsHelp
             ? recommendPhasePatch(session.phase, spec) ??
-              inferPhasePatch(session.phase, userAnswer, spec)
-            : inferPhasePatch(session.phase, userAnswer, spec) ??
+              inferPhasePatch(session.phase, inferSource, spec)
+            : inferPhasePatch(session.phase, inferSource, spec) ??
               recommendPhasePatch(session.phase, spec);
 
         if (fallback) {
@@ -387,7 +421,12 @@ export class InterviewEngine {
       }
     }
 
-    if (session.phase === "features" && userAnswer !== undefined && !skipRequested) {
+    if (
+      session.phase === "features" &&
+      userAnswer !== undefined &&
+      !skipRequested &&
+      !stayToClarify
+    ) {
       if (shouldExpandFeatures(spec, userAnswer)) {
         const features = recommendedFeatures(spec, userAnswer);
         const committed = commitProjectSpecPatch(spec, { features });
@@ -399,7 +438,12 @@ export class InterviewEngine {
       }
     }
 
-    if (session.phase === "database" && userAnswer !== undefined && !skipRequested) {
+    if (
+      session.phase === "database" &&
+      userAnswer !== undefined &&
+      !skipRequested &&
+      !stayToClarify
+    ) {
       if (isWeakDatabase(spec)) {
         const database = recommendedDatabase(spec);
         const committed = commitProjectSpecPatch(spec, { database });
@@ -411,6 +455,23 @@ export class InterviewEngine {
       }
     }
 
+    if (
+      session.phase === "discovery" &&
+      userAnswer !== undefined &&
+      !skipRequested &&
+      !stayToClarify
+    ) {
+      const rewritten = rewriteDiscoveryFromAnswer(
+        productAnswerCorpus(next, userAnswer) || userAnswer,
+      );
+      const committed = commitProjectSpecPatch(spec, rewritten);
+      if (committed.ok) {
+        spec = committed.spec;
+        extracted = true;
+        patch = { ...patch, ...rewritten };
+      }
+    }
+
     if (skipRequested && !skippedPhases.includes(session.phase)) {
       skippedPhases.push(session.phase);
     }
@@ -419,6 +480,7 @@ export class InterviewEngine {
       userAnswer !== undefined &&
       isSkippable(session.phase) &&
       !skipRequested &&
+      !stayToClarify &&
       !isPhaseSatisfied(session.phase, spec, {
         skipped: skippedPhases.includes(session.phase),
         confirmed,
@@ -444,7 +506,7 @@ export class InterviewEngine {
     });
 
     let phase: InterviewPhase = session.phase;
-    if (phaseSatisfied) {
+    if (phaseSatisfied && !stayToClarify) {
       phase = nextPhase(session.phase);
     }
 
@@ -471,7 +533,12 @@ export class InterviewEngine {
           session.phase,
           phase,
           parsed.question,
-          notedRecommendation,
+          {
+            notedRecommendation,
+            clarifying: stayToClarify,
+            answer: userAnswer,
+            spec,
+          },
         ),
         extracted,
       },

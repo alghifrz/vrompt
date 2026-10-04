@@ -56,7 +56,7 @@ function normalizeCandidate(value: unknown): unknown {
     return value;
   }
 
-  if ("patch" in value || "skip" in value || "confirm" in value) {
+  if ("patch" in value || "skip" in value || "confirm" in value || "clarify" in value) {
     return value;
   }
 

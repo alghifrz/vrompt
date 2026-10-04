@@ -16,19 +16,30 @@ function formatConversation(messages: readonly InterviewMessage[]): string {
 function phaseGuidance(phase: InterviewPhase): string {
   switch (phase) {
     case "discovery":
-      return "Capture the idea in plain language. One clear answer is enough.";
+      return [
+        "Capture the idea in plain language.",
+        "If they only say they want an app, or the job is still fuzzy, set clarify:true and ask what job a user must finish first.",
+        "Do not invent a product domain to fill the spec.",
+      ].join(" ");
     case "goals":
-      return "Capture the main outcome. Do not ask for a second goal if one is already clear.";
+      return [
+        "Capture the main outcome.",
+        "If the answer is only 'biar gampang' or 'supaya lebih baik' with no object, set clarify:true and ask what changes for the user.",
+        "Do not ask for a second goal if one is already clear.",
+      ].join(" ");
     case "features":
       return [
         "You just talked with the user. Understand the product the way ChatGPT would after a short discussion.",
         "Write a first-version feature catalog for THIS product: the jobs that must exist for the idea to work.",
         "Do not paste a chat sentence as a feature. Keep anything they named, then add the implied v1 jobs: create or record the main thing, see the list, and handle the other people or objects they mentioned.",
         "Usually 3-6 features. Short job names, a one-sentence why, one acceptance line. Same language as the user.",
-        "Do not ask for more features. Put the catalog in the patch and move on.",
+        "If you still cannot name the jobs without guessing, set clarify:true and ask for 2-3 concrete jobs. Do not invent a catalog.",
       ].join(" ");
     case "users":
-      return "Capture who it is for. One user type is enough.";
+      return [
+        "Capture who it is for. One user type is enough.",
+        "If they only say orang, user, or everyone, set clarify:true and ask who uses it every day.",
+      ].join(" ");
     case "stack":
       return [
         "You are an expert software developer. Understand casual talk: fe/front = frontend, be/back = backend, pake/pakai = use, gw/gue = I.",
@@ -46,6 +57,7 @@ function phaseGuidance(phase: InterviewPhase): string {
         "Tables are people, things they work with, and events they create. Use noun names.",
         "Do not copy a persona or a feature title as the only tables.",
         "Add the obvious one-to-many relationships. If they do not know, still write that schema as a small Postgres start.",
+        "If the product jobs are still unclear and you would have to invent tables, set clarify:true and ask what must be stored.",
       ].join(" ");
     case "api":
       return "If they do not know, recommend a small authenticated HTTP API and say why: the web app can reuse it later.";
@@ -66,9 +78,12 @@ export function buildInterviewSystemPrompt(phase: InterviewPhase): string {
     "You are not a stenographer. After a short discussion you already understand the product, the way ChatGPT would.",
     "Write the spec an engineer would write from that understanding.",
     "Understand slang, typos, and short answers. Collect facts for a ProjectSpec. You do not write application code.",
-    "Interpret the current answer into structured fields, then move on.",
-    "Ask one focused question at a time. Never repeat the same question or the same topic.",
-    "Do not invent a different product. You MAY infer implied first-version features and tables that a software engineer would include for this kind of app.",
+    "Ask one focused question at a time. Never repeat the same question.",
+    "If you are still confused about the product job, the user, or what must be stored, you MUST ask. Set clarify:true, ask one specific question, and only patch facts you are sure about.",
+    "Guessing a fake domain, fake features, or fake tables is worse than asking. Do not invent a different product.",
+    "You MAY infer implied first-version features and tables only when the job is already clear.",
+    "If they say oke, iya, lanjut, or they do not know, stop asking, write the best spec you can, and move on.",
+    "At most two clarifying questions in the current phase. Then write the spec and move on.",
     "Never paste the user's raw chat wording into ProjectSpec fields. Never echo first-person dumps.",
     "If they name a product, use that short name. Description says what the app is. Problem says the current pain. Those three must be different.",
     "Rewrite slang and run-on answers into short, readable spec language in the same language.",
@@ -86,9 +101,11 @@ export function buildInterviewSystemPrompt(phase: InterviewPhase): string {
     "{",
     '  "patch": { ...optional ProjectSpec fields... },',
     '  "skip": false,',
-    '  "confirm": false',
+    '  "confirm": false,',
+    '  "clarify": false',
     "}",
     "</structured>",
+    "Set clarify:true only when you need one more answer in this same phase. Then QUESTION is that follow-up, not the next topic.",
     "Use skip only when the user clearly says this section is not needed.",
     "If the user says they do not know, do not skip. Recommend a simple default, explain why, and put it in patch.",
     "If the user agrees (oke, iya, boleh, lanjut, pakai rekomendasi), apply the recommendation now. Never ask the same question again. Never ask whether you should apply the patch.",
@@ -123,13 +140,14 @@ export function buildInterviewUserPrompt(
       : "No user answer yet. Ask the first discovery question in a friendly way.",
     "",
     "Write a complete patch for this phase by interpreting the answer, not by copying it.",
+    "If clarify is true, leave unsure fields empty. Do not fill them with guesses.",
     "Patch values must be rewritten spec language, never a verbatim user sentence.",
     "If they say they want an app to record X for Y, write a short name, a product description, and a separate current-pain problem.",
     "For stack answers, put each technology in frontend, backend, database, authentication, or hosting. Do not put a spoken sentence in additional.",
-    "For features, write a complete v1 job catalog from the conversation, not a single chat sentence.",
+    "For features, write a complete v1 job catalog from the conversation, not a single chat sentence — unless you must clarify first.",
     "For goals and users, write outcome statements and role names, not the chat dump.",
     "For database, write the people, objects, and events that make those jobs possible. Do not copy a persona or a feature title as the only tables.",
-    "The next QUESTION must be for the following topic, not a follow-up in this phase.",
+    "If you understand this phase, QUESTION is for the next topic. If you do not, QUESTION is a follow-up and clarify is true.",
     "Do not redefine the phase.",
   ].join("\n");
 }

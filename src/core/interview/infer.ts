@@ -123,6 +123,10 @@ function clip(value: string, max: number): string {
   return trimmed.slice(0, max) || trimmed;
 }
 
+export function rewriteDiscoveryFromAnswer(answer: string): ProjectSpecPatch {
+  return { project: interpretDiscovery(answer) };
+}
+
 export function inferPhasePatch(
   phase: InterviewPhase,
   answer: string,

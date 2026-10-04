@@ -69,6 +69,7 @@ export const InterviewExtractionSchema = z
     patch: ProjectSpecPatchSchema.optional(),
     skip: z.boolean().optional(),
     confirm: z.boolean().optional(),
+    clarify: z.boolean().optional(),
   })
   .strict();
 

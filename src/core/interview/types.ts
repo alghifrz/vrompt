@@ -65,6 +65,7 @@ export interface InterviewExtraction {
   readonly patch?: ProjectSpecPatch;
   readonly skip?: boolean;
   readonly confirm?: boolean;
+  readonly clarify?: boolean;
 }
 
 export interface InterviewTurnResult {

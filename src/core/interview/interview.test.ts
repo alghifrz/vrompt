@@ -236,6 +236,33 @@ describe("InterviewEngine", () => {
       expect(result.session.phase).toBe("goals");
     });
 
+    it("stays in discovery and asks when the idea is still too thin", async () => {
+      const started = {
+        ...createInterviewSession({ id: "int-1" }),
+        messages: [{ role: "assistant" as const, content: "What are you building?" }],
+        currentQuestion: {
+          id: "q-discovery-1",
+          phase: "discovery" as const,
+          text: "What are you building?",
+          required: true,
+        },
+        questionSeq: 1,
+      };
+      const provider = new MockLLMProvider({
+        response: mockResponse(
+          structuredResponse("Pekerjaan pertama yang harus bisa diselesaikan user di aplikasi ini apa?", {
+            clarify: true,
+            patch: {},
+          }),
+        ),
+      });
+      const result = await new InterviewEngine(provider).runTurn(started, "mau bikin app");
+
+      expect(result.session.phase).toBe("discovery");
+      expect(result.session.spec.project.name).toBe(INITIAL_PROJECT.name);
+      expect(result.question?.text).toMatch(/pekerjaan pertama|first job/i);
+    });
+
     it("accepts fenced JSON without a structured tag", async () => {
       const parsed = parseInterviewResponse(
         `QUESTION:\nNext?\n\n\`\`\`json\n${JSON.stringify({ patch: discoveryPatch })}\n\`\`\``,

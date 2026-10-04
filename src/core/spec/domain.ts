@@ -1,10 +1,13 @@
 import type { AIRule, Feature, ProjectSpec } from "../schema/project-spec";
 import { extractJobs, featuresFromJobs } from "./jobs";
 import {
+  isAbstractNoun,
   isJobVerb,
   isJunkNoun,
   isMethodWord,
   isRoleWord,
+  isSeasonWord,
+  isTimeWord,
   isVenueWord,
   looksLikeChattyLabel,
   looksLikeJunkLabel,
@@ -468,7 +471,15 @@ function normalizeToken(value: string): string {
 }
 
 function isNoiseTerm(word: string, actorName: string, projectName: string): boolean {
-  if (STOPWORDS.has(word) || isLikelyVerb(word) || isMethodWord(word) || isJunkNoun(word)) {
+  if (
+    STOPWORDS.has(word) ||
+    isLikelyVerb(word) ||
+    isMethodWord(word) ||
+    isJunkNoun(word) ||
+    isTimeWord(word) ||
+    isSeasonWord(word) ||
+    isAbstractNoun(word)
+  ) {
     return true;
   }
   if (isVenueWord(word)) {

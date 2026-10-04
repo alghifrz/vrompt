@@ -1,4 +1,5 @@
 import {
+  isAbstractNoun,
   isActorTitle,
   isJobVerb,
   isJunkNoun,
@@ -6,6 +7,7 @@ import {
   isPainWord,
   isQualityWord,
   isRoleWord,
+  isSeasonWord,
   isSlangVerb,
   isVenueWord,
   isSubjectPerson,
@@ -285,6 +287,20 @@ function jobObjects(answer: string): string[] {
   return objects;
 }
 
+function eventTitle(answer: string): string | undefined {
+  const tokens = answer
+    .toLowerCase()
+    .replace(/[^\p{L}\s-]/gu, " ")
+    .split(/\s+/)
+    .filter(Boolean);
+  const abstract = tokens.find((word) => isAbstractNoun(word));
+  const season = tokens.find((word) => isSeasonWord(word));
+  if (!abstract || !season) {
+    return undefined;
+  }
+  return titleCaseKeepCaps(`${abstract} ${season}`);
+}
+
 function joinList(items: string[], language: AnswerLanguage): string {
   if (items.length <= 1) {
     return items[0] ?? "";
@@ -309,6 +325,11 @@ export function interpretProductName(answer: string): string {
   const camel = answer.match(/\b([A-Z][a-z]+[A-Z][A-Za-z0-9]+)\b/);
   if (camel?.[1]) {
     return camel[1];
+  }
+
+  const eventName = eventTitle(answer);
+  if (eventName) {
+    return eventName;
   }
 
   const objects = jobObjects(answer);
@@ -498,9 +519,10 @@ export function interpretUser(answer: string, language: AnswerLanguage): {
     (word) => !isJunkNoun(word) && word.toLowerCase() !== "orang",
   );
   const fallback = language === "id" ? "Pengguna utama" : "Primary user";
+  const hasRole = Boolean(actor) || words.some((word) => isRoleWord(word) || isActorTitle(word));
   const name = actor
     ? actor
-    : words.length > 0
+    : hasRole && words.length > 0
       ? words.slice(0, 3).map((word) => titleCaseKeepCaps(word)).join(" ")
       : fallback;
   const cleanedName =

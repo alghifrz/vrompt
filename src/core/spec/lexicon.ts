@@ -139,6 +139,34 @@ export const PAIN_WORDS = new Set([
   "tertinggal",
 ]);
 
+export const TIME_WORDS = new Set([
+  "hari",
+  "jam",
+  "jadwal",
+  "schedule",
+  "tanggal",
+  "time",
+  "waktu",
+]);
+
+export const SEASON_WORDS = new Set([
+  "bulan",
+  "musim",
+  "ramadan",
+  "ramadhan",
+  "season",
+]);
+
+export const ABSTRACT_NOUNS = new Set([
+  "aktivitas",
+  "activity",
+  "hal",
+  "ibadah",
+  "kegiatan",
+  "ritual",
+  "sesuatu",
+]);
+
 export const JUNK_NOUNS = new Set([
   "antrian",
   "idea",
@@ -150,6 +178,7 @@ export const JUNK_NOUNS = new Set([
   "orang",
   "pekerjaan",
   "proses",
+  "secara",
   "sama",
   "semua",
   "tanpa",
@@ -212,12 +241,32 @@ export function isJunkNoun(value: string): boolean {
   );
 }
 
+export function isTimeWord(value: string): boolean {
+  return TIME_WORDS.has(normalizeLexeme(value));
+}
+
+export function isSeasonWord(value: string): boolean {
+  return SEASON_WORDS.has(normalizeLexeme(value));
+}
+
+export function isAbstractNoun(value: string): boolean {
+  return ABSTRACT_NOUNS.has(normalizeLexeme(value));
+}
+
 export function isWorkNoun(value: string): boolean {
   const word = normalizeLexeme(value);
   if (word.length < 3) {
     return false;
   }
-  if (isJunkNoun(word) || isJobVerb(word) || isActorTitle(word) || isVenueWord(word)) {
+  if (
+    isJunkNoun(word) ||
+    isJobVerb(word) ||
+    isActorTitle(word) ||
+    isVenueWord(word) ||
+    isTimeWord(word) ||
+    isSeasonWord(word) ||
+    isAbstractNoun(word)
+  ) {
     return false;
   }
   return true;

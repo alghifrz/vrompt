@@ -68,6 +68,13 @@ describe("interview interpret", () => {
     expect(user.goals[0]).not.toBe("penjaga warung kek saya");
   });
 
+  it("does not treat a worship job as the user name", () => {
+    const user = interpretUser("orang yang puasa ramadhan", "id");
+
+    expect(user.name).toBe("Pengguna utama");
+    expect(user.name).not.toMatch(/puasa/i);
+  });
+
   it("flags chat wording and spoken names", () => {
     expect(looksLikeRawChat("gw mau bikin app")).toBe(true);
     expect(looksLikeSpokenName("Aplikasi habit tracker namanya Daities")).toBe(true);
@@ -77,6 +84,14 @@ describe("interview interpret", () => {
 
   it("keeps an explicit CamelCase product name", () => {
     expect(interpretProductName("FieldKit for dispatchers")).toBe("FieldKit");
+  });
+
+  it("names a ramadan worship idea from the season, not a job dump", () => {
+    expect(
+      interpretProductName(
+        "gw mau bikin app manage ibadah ramadhan\ncatat sholat tarawih, puasa, tadarus biar ga kelewat",
+      ),
+    ).toBe("Ibadah Ramadhan");
   });
 
   it("names a clinic idea from the job, not the venue only", () => {

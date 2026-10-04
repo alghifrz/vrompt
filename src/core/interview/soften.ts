@@ -8,7 +8,7 @@ import {
   UserTypeSchema,
 } from "../schema/project-spec";
 
-const EXTRACTION_KEYS = ["patch", "skip", "confirm"] as const;
+const EXTRACTION_KEYS = ["patch", "skip", "confirm", "clarify"] as const;
 const PATCH_KEYS = [
   "project",
   "goals",

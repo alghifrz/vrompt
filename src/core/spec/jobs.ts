@@ -1,8 +1,12 @@
 import type { Feature, ProjectSpec } from "../schema/project-spec";
 import {
+  isAbstractNoun,
   isJobVerb,
   isJunkNoun,
   isMethodWord,
+  isSeasonWord,
+  isTimeWord,
+  isWorkNoun,
   looksLikeChattyLabel,
   looksLikeJunkLabel,
   singularizeNoun,
@@ -51,6 +55,7 @@ const NOISE = new Set([
   "pekerjaan",
   "tracker",
   "proses",
+  "secara",
 ]);
 
 function titleCase(value: string): string {
@@ -99,6 +104,9 @@ function addJob(
     isJobVerb(normalized) ||
     isMethodWord(normalized) ||
     isJunkNoun(normalized) ||
+    isTimeWord(normalized) ||
+    isSeasonWord(normalized) ||
+    isAbstractNoun(normalized) ||
     looksLikeJunkLabel(normalized)
   ) {
     return;
@@ -148,6 +156,28 @@ export function extractJobs(spec: ProjectSpec, extra = ""): ProductJob[] {
       language,
       CAPTURE_VERBS.test(match[1] ?? "") ? "capture" : "manage",
     );
+  }
+
+  for (const match of corpus.matchAll(
+    /\b(catat|mencatat|kelola|mengelola|ingetin|ngingetin|ingatkan|remind|record|manage)\s+(.+?)(?:\b(?:biar|supaya|agar|buat|untuk)\b|$)/gi,
+  )) {
+    const verb = match[1] ?? "catat";
+    const tail = match[2] ?? "";
+    for (const part of tail.split(/,| dan | sama | and /i)) {
+      const object =
+        part
+          .split(/\s+/)
+          .map((word) => word.replace(/[^\p{L}-]/gu, ""))
+          .find((word) => isWorkNoun(word) && !NOISE.has(word.toLowerCase())) ?? "";
+      addJob(
+        jobs,
+        seen,
+        verb,
+        object,
+        language,
+        /ingat|remind/i.test(verb) ? "manage" : "capture",
+      );
+    }
   }
 
   for (const match of corpus.matchAll(
