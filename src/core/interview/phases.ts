@@ -143,7 +143,11 @@ export function isPhaseSatisfied(
     case "security":
       return context.skipped || hasSecurity(spec);
     case "ai_rules":
-      return context.skipped || context.patch?.aiRules !== undefined;
+      return (
+        context.skipped ||
+        Boolean(spec.aiRules && spec.aiRules.length > 0) ||
+        context.patch?.aiRules !== undefined
+      );
     case "review":
       return context.confirmed;
     case "complete":

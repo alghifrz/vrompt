@@ -11,6 +11,18 @@ import {
   type SpecLanguage,
 } from "../spec/domain";
 import type { GeneratedFile } from "./types";
+import { buildExpertFields } from "./erd-fields";
+import {
+  experienceNotes,
+  featureAcceptance,
+  featureFlow,
+  featureNotes,
+  inferredSuccessCriteria,
+  journeyText,
+  openQuestions,
+  userStory,
+  whyThisProduct,
+} from "./prd-content";
 
 export interface DocField {
   readonly type: string;
@@ -77,7 +89,10 @@ export function buildPrdView(spec: ProjectSpec): PrdView {
       spec.goals?.primary.map((goal) => goal.statement) ?? [
         "Deliver a small first version that solves the stated problem.",
       ],
-    successCriteria: spec.goals?.successCriteria ?? [],
+    successCriteria:
+      spec.goals?.successCriteria && spec.goals.successCriteria.length > 0
+        ? spec.goals.successCriteria
+        : inferredSuccessCriteria(spec),
     users: (spec.users ?? []).map((user) => ({
       name: user.name,
       description: user.description,
@@ -178,7 +193,7 @@ export function renderPrd(spec: ProjectSpec): string {
     ``,
     `### 3.2 Why this product`,
     ``,
-    view.description,
+    whyThisProduct(spec),
     ``,
     `### 3.3 Target users`,
     ``,
@@ -241,7 +256,12 @@ export function renderPrd(spec: ProjectSpec): string {
             feature.priority,
             feature.status,
             feature.description,
-            feature.acceptance.join("; ") || copy(spec).defaultAcceptance(feature.name),
+            feature.acceptance.join("; ") ||
+            featureAcceptance(spec, {
+              name: feature.name,
+              description: feature.description,
+              acceptanceCriteria: feature.acceptance,
+            }).join("; "),
           ])
         : [copy(spec).emptyFeatureRow],
     ),
@@ -257,7 +277,7 @@ export function renderPrd(spec: ProjectSpec): string {
     ...detailedFeatures(spec, view.features),
     `## 8. Experience notes`,
     ``,
-    ...copy(spec).experience(view),
+    ...experienceNotes(spec),
     ``,
     `## 9. Technical design`,
     ``,
@@ -316,7 +336,7 @@ export function renderPrd(spec: ProjectSpec): string {
     ``,
     `## 11. Open questions`,
     ``,
-    ...copy(spec).openQuestions(view),
+    ...openQuestions(spec),
     ``,
   ].join("\n");
 }
@@ -411,29 +431,29 @@ function detailedFeatures(spec: ProjectSpec, features: PrdView["features"]): str
     ``,
     `**${words.userStory}**`,
     ``,
-    words.story(feature, viewActor(spec)),
+    userStory(spec, feature),
     ``,
     `**${words.acceptance}**`,
     ``,
-    ...(feature.acceptance.length
-      ? feature.acceptance.map((item) => `- [ ] ${item}`)
-      : words.defaultAcceptanceList(feature.name)),
+    ...featureAcceptance(spec, {
+      name: feature.name,
+      description: feature.description,
+      acceptanceCriteria: feature.acceptance,
+    }).map((item) => `- [ ] ${item}`),
     ``,
     `**${words.flow}**`,
     ``,
-    ...words.featureFlow(feature.name, domain),
+    ...featureFlow(spec, feature, domain),
     ``,
     `**${words.implNotes}**`,
     ``,
-    ...words.featureNotes(feature.name, domain),
+    ...featureNotes(spec, feature, domain),
     ``,
   ]);
 }
 
-function journeyNarrative(spec: ProjectSpec, view: PrdView): string {
-  const user = view.users[0]?.name ?? spec.project.targetUsers[0] ?? viewActor(spec);
-  const feature = view.features[0]?.name ?? copy(spec).mainAction;
-  return copy(spec).journey(user, feature);
+function journeyNarrative(spec: ProjectSpec, _view: PrdView): string {
+  return journeyText(spec);
 }
 
 function prdGoalMermaid(view: PrdView): string {
@@ -525,8 +545,8 @@ function specEntities(spec: ProjectSpec, domain: DomainModel): ErdEntityView[] {
         name: entity.name,
         description: entity.description,
         fields: noun
-          ? fieldsForNoun(noun, domain)
-          : inferFields(entity.name, entity.description, domain),
+          ? fieldsForNoun(noun, domain, spec)
+          : inferFields(entity.name, entity.description, domain, spec),
       };
     });
 
@@ -548,7 +568,7 @@ function domainEntities(spec: ProjectSpec, domain: DomainModel): ErdEntityView[]
     id: mermaidId(noun.name),
     name: noun.name,
     description: noun.description,
-    fields: fieldsForNoun(noun, domain),
+    fields: fieldsForNoun(noun, domain, spec),
   }));
 
   if (hasAuth(spec)) {
@@ -663,197 +683,32 @@ function applyRelationshipKeys(
 function fieldsForNoun(
   noun: DomainModel["actor"],
   domain: DomainModel,
+  spec?: ProjectSpec,
 ): DocField[] {
-  const idNotes = domain.language === "id";
-  const actorId = mermaidId(domain.actor.name);
-
-  if (noun.kind === "actor") {
-    return uniqueFields(
-      [
-        field("string", "id", {
-          key: "PK",
-          notes: idNotes ? `Kunci utama ${noun.name}.` : `Primary key for ${noun.name}.`,
-        }),
-        field("string", "name", {
-          notes: idNotes ? `Nama lengkap ${noun.name.toLowerCase()}.` : "Display name.",
-        }),
-        field("string", "email", {
-          notes: idNotes ? "Email untuk masuk." : "Unique sign-in email.",
-        }),
-        field("string", "role", {
-          notes: idNotes ? "Peran di aplikasi." : "Application role.",
-        }),
-        field("datetime", "createdAt", {
-          notes: idNotes ? "Waktu baris dibuat." : "Row created at.",
-        }),
-        field("datetime", "updatedAt", {
-          notes: idNotes ? "Waktu terakhir diubah." : "Last update time.",
-        }),
-      ],
-      noun.id,
-    );
-  }
-
-  if (noun.kind === "subject" || noun.kind === "supporting") {
-    return uniqueFields(
-      [
-        field("string", "id", {
-          key: "PK",
-          notes: idNotes ? `Kunci utama ${noun.name}.` : `Primary key for ${noun.name}.`,
-        }),
-        field("string", "name", {
-          notes: idNotes ? `Nama ${noun.name.toLowerCase()}.` : `${noun.name} display name.`,
-        }),
-        field("string", "status", {
-          required: false,
-          notes: idNotes ? "Status baris ini, jika dipakai." : "Optional row status.",
-        }),
-        field("datetime", "createdAt", {
-          notes: idNotes ? "Waktu baris dibuat." : "Row created at.",
-        }),
-        field("datetime", "updatedAt", {
-          notes: idNotes ? "Waktu terakhir diubah." : "Last update time.",
-        }),
-      ],
-      noun.id,
-    );
-  }
-
-  if (noun.kind === "record") {
-    const subjectId = domain.subject ? mermaidId(domain.subject.name) : undefined;
-    return uniqueFields(
-      [
-        field("string", "id", {
-          key: "PK",
-          notes: idNotes ? `Kunci utama ${noun.name}.` : `Primary key for ${noun.name}.`,
-        }),
-        ...(subjectId
-          ? [
-              field("string", `${lowerFirst(subjectId)}Id`, {
-                key: "FK" as const,
-                notes: idNotes
-                  ? `Mengacu ke ${subjectId}.id.`
-                  : `References ${subjectId}.id.`,
-              }),
-            ]
-          : []),
-        field("string", `${lowerFirst(actorId)}Id`, {
-          key: "FK",
-          notes: idNotes
-            ? `Mengacu ke ${actorId}.id.`
-            : `References ${actorId}.id.`,
-        }),
-        field("string", "status", {
-          notes: idNotes ? `Status ${noun.name.toLowerCase()}.` : `${noun.name} status.`,
-        }),
-        field("datetime", "createdAt", {
-          notes: idNotes ? "Waktu baris dibuat." : "Row created at.",
-        }),
-        field("datetime", "updatedAt", {
-          notes: idNotes ? "Waktu terakhir diubah." : "Last update time.",
-        }),
-      ],
-      noun.id,
-    );
-  }
-
-  return inferFields(noun.name, noun.description, domain);
+  return buildExpertFields(noun, domain, spec);
 }
 
 function inferFields(
   name: string,
   description: string,
   domain: DomainModel,
+  spec?: ProjectSpec,
 ): DocField[] {
-  const text = `${name} ${description}`.toLowerCase();
-  const idNotes = domain.language === "id";
-  const fields: DocField[] = [
-    field("string", "id", {
-      key: "PK",
-      notes: idNotes ? `Kunci utama ${titleCase(name)}.` : `Primary key for ${titleCase(name)}.`,
-    }),
-  ];
-  const actorId = mermaidId(domain.actor.name);
-
-  if (/user|owner|admin|dispatcher|penjaga|customer|guru|teacher/i.test(name)) {
-    fields.push(
-      field("string", "name", {
-        notes: idNotes ? "Nama tampilan." : "Display name.",
-      }),
-      field("string", "email", {
-        notes: idNotes ? "Email unik untuk masuk." : "Unique sign-in email.",
-      }),
-      field("string", "role", {
-        notes: idNotes ? "Peran di aplikasi." : "Application role.",
-      }),
-    );
-  } else if (/session|auth/i.test(name)) {
-    fields.push(
-      field("string", "userId", {
-        key: "FK",
-        notes: idNotes ? `Mengacu ke ${actorId}.id.` : `References ${actorId}.id.`,
-      }),
-      field("datetime", "expiresAt", {
-        notes: idNotes ? "Kapan sesi tidak berlaku." : "When the session stops being valid.",
-      }),
-    );
-  } else {
-    fields.push(
-      field("string", "title", {
-        notes: idNotes ? "Label singkat di daftar." : "Short label shown in lists.",
-      }),
-      field("string", "status", {
-        notes: idNotes
-          ? "Status siklus, misalnya direncanakan atau selesai."
-          : "Lifecycle state, for example planned or done.",
-      }),
-      field("string", `${lowerFirst(actorId)}Id`, {
-        key: "FK",
-        notes: idNotes
-          ? `Mengacu ke ${actorId}.id. Pemilik ${titleCase(name)}.`
-          : `References ${actorId}.id. Owner of this ${titleCase(name)}.`,
-      }),
-    );
-  }
-
-  if (/note|comment|message|catat/i.test(text)) {
-    fields.push(
-      field("text", "body", {
-        notes: idNotes ? "Isi tulisan utama." : "Main written content.",
-      }),
-    );
-  }
-  if (/visit|schedule|event|appointment|kunjung/i.test(text)) {
-    fields.push(
-      field("datetime", "scheduledAt", {
-        notes: idNotes ? "Kapan catatan ini terjadi." : "When this record happens.",
-      }),
-    );
-  }
-  if (/price|amount|total|bayar/i.test(text)) {
-    fields.push(
-      field("number", "amount", {
-        notes: idNotes ? "Nilai uang." : "Money value in the project currency.",
-      }),
-    );
-  }
-  if (/qty|stock|stok|count/i.test(text)) {
-    fields.push(
-      field("number", "quantity", {
-        notes: idNotes ? "Jumlah yang dihitung." : "Countable amount.",
-      }),
-    );
-  }
-
-  fields.push(
-    field("datetime", "createdAt", {
-      notes: idNotes ? "Waktu baris dibuat." : "Row created at.",
-    }),
-    field("datetime", "updatedAt", {
-      notes: idNotes ? "Waktu terakhir diubah." : "Last update time.",
-    }),
+  const kind: DomainModel["actor"]["kind"] = /session|auth/i.test(name)
+    ? "supporting"
+    : /user|owner|admin|dispatcher|penjaga|guru|teacher|dokter/i.test(name)
+      ? "actor"
+      : "record";
+  return buildExpertFields(
+    {
+      id: mermaidId(name),
+      name,
+      description,
+      kind,
+    },
+    domain,
+    spec,
   );
-  return uniqueFields(fields, mermaidId(name));
 }
 
 function suggestedQueries(spec: ProjectSpec, view: ErdView): string[] {
@@ -939,8 +794,11 @@ function hasAuth(spec: ProjectSpec): boolean {
 
 function matchNoun(name: string, domain: DomainModel): DomainModel["actor"] | undefined {
   const id = mermaidId(name);
-  return [domain.actor, domain.subject, domain.record].find(
-    (noun) => noun && mermaidId(noun.name) === id,
+  return (
+    domain.entities.find((noun) => mermaidId(noun.name) === id) ??
+    [domain.actor, domain.subject, domain.record].find(
+      (noun) => noun && mermaidId(noun.name) === id,
+    )
   );
 }
 
@@ -1039,24 +897,6 @@ function copy(spec: ProjectSpec) {
       id
         ? `Persona belum diisi. Anggap audiens utamanya: ${audience}.`
         : `Detailed personas are not specified yet. Treat the primary audience as: ${audience}.`,
-    defaultAcceptance: (name: string) =>
-      id
-        ? `Pengguna bisa menyelesaikan ${name} di dalam aplikasi.`
-        : `User can finish this flow in-app.`,
-    experience: (view: PrdView) =>
-      id
-        ? [
-            `- Layar pertama menjelaskan ${view.name} dalam satu halaman.`,
-            `- State kosong harus memberitahu guru atau pengguna apa yang dikerjakan berikutnya.`,
-            `- Error harus bisa diperbaiki tanpa kehilangan data yang sudah diisi.`,
-            `- Versi pertama cukup kecil untuk didemo dari masuk sampai pekerjaan selesai.`,
-          ]
-        : [
-            `- First-run experience should explain ${view.name} in one screen.`,
-            `- Empty states should tell the user what to do next.`,
-            `- Errors should be recoverable without losing work.`,
-            `- The first version stays small enough to demo end-to-end.`,
-          ],
     defaultArchitecture: id
       ? "Mulai sebagai satu aplikasi yang bisa di-deploy sampai permukaan kedua benar-benar dibutuhkan."
       : "Start as one deployable app until a second surface is real.",
@@ -1066,18 +906,6 @@ function copy(spec: ProjectSpec) {
     noApi: id
       ? "Belum ada API publik untuk versi pertama."
       : "No public API is specified for the first version.",
-    openQuestions: (view: PrdView) =>
-      id
-        ? [
-            `- Apa jalur demo terkecil yang ${view.users[0]?.name ?? "pengguna baru"} harus selesai dalam satu kali duduk?`,
-            `- Fitur mana yang boleh ditunda jika versi pertama molor?`,
-            `- Data apa yang tidak boleh keluar dari server?`,
-          ]
-        : [
-            `- What is the smallest demo path a new user should finish in one sitting?`,
-            `- Which feature can wait if the first version slips?`,
-            `- What data must never leave the server?`,
-          ],
     erdIntro: (name: string) =>
       id
         ? `Model data logis untuk **${name}**. Pakai ini saat membuat tabel, tipe, dan payload API.`
@@ -1124,35 +952,12 @@ function copy(spec: ProjectSpec) {
     acceptance: id ? "Kriteria penerimaan" : "Acceptance criteria",
     flow: id ? "Alur kerja" : "Working flow",
     implNotes: id ? "Catatan implementasi" : "Implementation notes",
-    mainAction: id ? "pekerjaan utama" : "the main action",
     featureHeaders: id
       ? ["Fitur", "Prioritas", "Status", "Fungsinya", "Penerimaan"]
       : ["Feature", "Priority", "Status", "What it does", "Acceptance"],
     emptyFeatureRow: id
       ? ["—", "must", "planned", "Fitur belum diisi.", "—"]
       : ["—", "must", "planned", "No features specified yet.", "—"],
-    story: (feature: PrdView["features"][number], actor: string) =>
-      id
-        ? `Sebagai ${titleCase(actor)}, saya ingin ${feature.name.toLowerCase()} supaya ${softenPurpose(feature.description)}.`
-        : `As ${actor}, I want ${feature.name} so that ${softenPurpose(feature.description)}.`,
-    defaultAcceptanceList: (name: string) =>
-      id
-        ? [
-            `- [ ] ${name} bisa diselesaikan tanpa keluar dari aplikasi.`,
-            `- [ ] Jika gagal, pesan kesalahan terlihat dan data yang sudah diisi tidak hilang.`,
-          ]
-        : [
-            `- [ ] A user can complete ${name} without leaving the app.`,
-            `- [ ] Failure states are visible and recoverable.`,
-          ],
-    featureFlow: (name: string, domain: DomainModel) =>
-      featureFlowLines(name, domain),
-    featureNotes: (name: string, domain: DomainModel) =>
-      featureNoteLines(name, domain),
-    journey: (user: string, feature: string) =>
-      id
-        ? `Sesi pertama yang wajar: ${user} masuk, memahami masalah di satu layar, lalu menyelesaikan **${feature}**. Jika jalur itu tidak bisa, versi pertama belum selesai.`
-        : `A typical first session: ${user} signs in, understands the problem in one screen, then completes **${feature}**. If that path is not possible, the first version is not done.`,
     journeyLabels: id
       ? { signIn: "Masuk", home: "Buka beranda", done: "Selesai" }
       : { signIn: "Sign in", home: "Land on home", done: "Job complete" },
@@ -1212,45 +1017,6 @@ function copy(spec: ProjectSpec) {
           laterEmpty: "Not in v1",
         },
   };
-}
-
-function softenPurpose(description: string): string {
-  return description
-    .replace(/^(fitur untuk|a feature to|the feature to|feature to)\s+/i, "")
-    .replace(/\.$/, "")
-    .replace(/^([A-Z])/, (letter) => letter.toLowerCase());
-}
-
-function featureFlowLines(name: string, domain: DomainModel): string[] {
-  if (domain.language === "id") {
-    return [
-      `- ${domain.actor.name} masuk dan melihat daftar ${domain.record.name}.`,
-      `- ${domain.actor.name} menjalankan **${name}** pada data yang relevan.`,
-      `- Sistem menyimpan hasilnya dan menampilkan konfirmasi yang jelas.`,
-    ];
-  }
-  return [
-    `- ${domain.actor.name} signs in and sees the ${domain.record.name} list.`,
-    `- ${domain.actor.name} completes **${name}** on the relevant records.`,
-    `- The app saves the result and shows a clear confirmation.`,
-  ];
-}
-
-function featureNoteLines(name: string, domain: DomainModel): string[] {
-  if (domain.language === "id") {
-    return [
-      `- Kerjakan hanya **${name}**. Jangan campur fitur berikutnya.`,
-      `- Pakai model ${[domain.actor.name, domain.subject?.name, domain.record.name].filter(Boolean).join(", ")}.`,
-      `- Jangan membuat entitas Item atau endpoint /api/items.`,
-      `- Berhenti ketika kriteria penerimaan terpenuhi.`,
-    ];
-  }
-  return [
-    `- Implement only **${name}**. Do not start the next feature.`,
-    `- Reuse ${[domain.actor.name, domain.subject?.name, domain.record.name].filter(Boolean).join(", ")}.`,
-    `- Do not invent an Item entity or /api/items.`,
-    `- Stop when the acceptance list is true.`,
-  ];
 }
 
 function stackItems(spec: ProjectSpec): string[] {
@@ -1391,13 +1157,6 @@ function cell(value: string): string {
 
 function unique(items: string[]): string[] {
   return [...new Set(items)];
-}
-
-function titleCase(value: string): string {
-  return value
-    .split(/\s+/)
-    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
-    .join(" ");
 }
 
 function lowerFirst(value: string): string {

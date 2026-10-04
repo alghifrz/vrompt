@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { ProjectSpec } from "../schema/project-spec";
 import {
   isWeakDatabase,
+  recommendedAiRules,
   recommendedDatabase,
   recommendedFeatures,
   shouldExpandFeatures,
@@ -74,5 +75,14 @@ describe("domain blueprint", () => {
     );
     expect(names).not.toContain("Pembayaran Via Rekening Tetap");
     expect(names.length).toBeGreaterThanOrEqual(3);
+  });
+
+  it("writes AI rules from the inferred jobs and tables", () => {
+    const rules = recommendedAiRules(bookstore);
+    const text = rules.map((rule) => `${rule.title} ${rule.body}`).join(" ");
+
+    expect(rules.length).toBeGreaterThanOrEqual(2);
+    expect(rules.some((rule) => rule.id === "rule-keep-scope")).toBe(true);
+    expect(text).toMatch(/pembayaran|penjualan|stok|buku/i);
   });
 });

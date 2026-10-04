@@ -293,7 +293,7 @@ export class InterviewEngine {
             content: buildInterviewUserPrompt(session, userAnswer),
           },
         ],
-        temperature: 0,
+        temperature: 0.3,
         metadata: {
           interviewId: session.id,
           phase: session.phase,

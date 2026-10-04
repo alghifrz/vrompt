@@ -1,12 +1,20 @@
-import { MockLLMProvider } from "../../core/llm/mock";
-import type { LLMProvider, LLMRequest } from "../../core/llm/types";
-import type { InterviewPhase } from "../../core/interview/types";
+import { createInitialProjectSpec } from "../../core/interview/engine";
+import {
+  detectAnswerLanguage,
+  interpretDiscovery,
+  interpretGoal,
+  interpretUser,
+} from "../../core/interview/interpret";
 import {
   polishSpecLocally,
   SPEC_REWRITE_PURPOSE,
   specToRewritePatch,
 } from "../../core/interview/rewrite";
+import type { InterviewPhase } from "../../core/interview/types";
+import { MockLLMProvider } from "../../core/llm/mock";
+import type { LLMProvider, LLMRequest } from "../../core/llm/types";
 import { ProjectSpecSchema } from "../../core/schema/project-spec";
+import { recommendedFeatures } from "../../core/spec/domain";
 import { hasStructuredStack, interpretStackAnswer } from "../../core/spec/stack";
 
 /**
@@ -28,9 +36,20 @@ function structured(question: string, payload: Record<string, unknown>): string 
   return `QUESTION:\n${question}\n\n<structured>\n${JSON.stringify(payload)}\n</structured>`;
 }
 
-function firstClause(text: string, max: number): string {
-  const clause = text.split(/[,.\n]/)[0]?.trim() || text.trim();
-  return clause.slice(0, max) || "New project";
+function specFromInterviewPrompt(content: string) {
+  const match = content.match(
+    /Known project facts \(canonical ProjectSpec draft\):\n([\s\S]*?)\n\nMissing information/,
+  );
+  if (!match?.[1]) {
+    return undefined;
+  }
+
+  try {
+    const parsed = ProjectSpecSchema.safeParse(JSON.parse(match[1]));
+    return parsed.success ? parsed.data : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 function specFromRewritePrompt(content: string) {
@@ -58,9 +77,11 @@ function rewriteResponse(request: LLMRequest): string {
   });
 }
 
-function responseFor(phase: string, answer: string): string {
+function responseFor(phase: string, answer: string, request?: LLMRequest): string {
   const text = answer || "the product";
-  const name = firstClause(text, 32);
+  const language = detectAnswerLanguage(text);
+  const knownSpec =
+    request && specFromInterviewPrompt(request.messages.at(-1)?.content ?? "");
 
   switch (phase as InterviewPhase) {
     case "discovery":
@@ -69,13 +90,7 @@ function responseFor(phase: string, answer: string): string {
       }
       return structured("What is the main outcome you want first?", {
         patch: {
-          project: {
-            name,
-            description: `A web application for ${text.slice(0, 160)}.`,
-            problem: `The current workflow is hard to keep organized: ${text.slice(0, 160)}.`,
-            targetUsers: ["Early users"],
-            type: "web application",
-          },
+          project: interpretDiscovery(answer),
         },
       });
     case "goals":
@@ -85,42 +100,37 @@ function responseFor(phase: string, answer: string): string {
             primary: [
               {
                 id: "goal-1",
-                statement: `Deliver a first version that ${text.slice(0, 160)}.`,
+                statement: interpretGoal(text, language),
               },
             ],
             successCriteria: [],
           },
         },
       });
-    case "features":
+    case "features": {
+      const spec = knownSpec ?? createInitialProjectSpec();
       return structured("Who will use this product?", {
         patch: {
-          features: [
-            {
-              id: "feature-1",
-              name: name || "Core feature",
-              description: `Users can ${text.slice(0, 160)}.`,
-              priority: "must",
-              status: "planned",
-              acceptanceCriteria: [],
-            },
-          ],
+          features: recommendedFeatures(spec, text),
         },
       });
-    case "users":
+    }
+    case "users": {
+      const user = interpretUser(text, language);
       return structured("What technology stack are you using, if any?", {
         patch: {
           users: [
             {
               id: "user-1",
-              name: name || "Primary user",
-              description: `The person who ${text.slice(0, 160)}.`,
-              goals: [`Use the product to ${text.slice(0, 80)}.`],
+              name: user.name,
+              description: user.description,
+              goals: user.goals,
               permissions: ["use-app"],
             },
           ],
         },
       });
+    }
     case "stack": {
       const stack = interpretStackAnswer(text);
       const known = hasStructuredStack(stack);
@@ -168,7 +178,7 @@ export function createDevelopmentLLMProvider(): LLMProvider {
       content:
         request.metadata?.purpose === SPEC_REWRITE_PURPOSE
           ? rewriteResponse(request)
-          : responseFor(request.metadata?.phase ?? "discovery", latestAnswer(request)),
+          : responseFor(request.metadata?.phase ?? "discovery", latestAnswer(request), request),
       provider: "dev-mock",
     }),
   });

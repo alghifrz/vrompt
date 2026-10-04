@@ -8,6 +8,19 @@ import {
 } from "../spec/domain";
 import { looksLikeStackDump, rescueStack } from "../spec/stack";
 import { parseInterviewResponse } from "./extraction";
+import { looksLikeChattyLabel, looksLikeJunkLabel } from "../spec/lexicon";
+import { recommendedAiRules } from "../spec/domain";
+import {
+  detectAnswerLanguage,
+  interpretDescription,
+  interpretDiscovery,
+  interpretGoal,
+  interpretProblem,
+  interpretUser,
+  looksLikeActorName,
+  looksLikeRawChat,
+  looksLikeSpokenName,
+} from "./interpret";
 import { commitProjectSpecPatch } from "./merge";
 import { INITIAL_PROJECT } from "./phases";
 import type { ProjectSpecPatch } from "./types";
@@ -21,7 +34,7 @@ const FILLERS =
   /\b(gw|gue|gua|aku|banget|gitu|kek|kayak|sih|deh|dong|wkwk|namanya|punya|jadi)\b/gi;
 
 export function looksLikeCasualSpeech(text: string): boolean {
-  return CASUAL_SPEECH.test(text);
+  return looksLikeRawChat(text) || CASUAL_SPEECH.test(text);
 }
 
 function isPlaceholderProject(spec: ProjectSpec): boolean {
@@ -41,13 +54,11 @@ export function needsSpecRewrite(spec: ProjectSpec): boolean {
     return true;
   }
   if (
+    looksLikeSpokenName(name) ||
     looksLikeCasualSpeech(name) ||
     looksLikeCasualSpeech(description) ||
     looksLikeCasualSpeech(problem)
   ) {
-    return true;
-  }
-  if (name.length > 42 && /[,;]/.test(name)) {
     return true;
   }
   if (targetUsers.some((user) => looksLikeCasualSpeech(user))) {
@@ -78,6 +89,27 @@ export function needsSpecRewrite(spec: ProjectSpec): boolean {
     return true;
   }
 
+  if (looksLikeActorName(name)) {
+    return true;
+  }
+  if (spec.users?.some((user) => user.name === name) || targetUsers.includes(name)) {
+    return true;
+  }
+  if (spec.goals?.primary.some((goal) => /manual lagi|aja kali|gitu\b/i.test(goal.statement))) {
+    return true;
+  }
+  if (spec.features?.some((feature) => looksLikeChattyLabel(feature.name) || looksLikeJunkLabel(feature.name))) {
+    return true;
+  }
+  if ((spec.aiRules?.length ?? 0) <= 1 && (spec.features?.length ?? 0) >= 1) {
+    return true;
+  }
+  if (
+    spec.database?.entities?.some((entity) => /^(catat|kelola|lihat|lewat)$/i.test(entity.name))
+  ) {
+    return true;
+  }
+
   if (looksLikeStackDump(spec.stack)) {
     return true;
   }
@@ -91,11 +123,15 @@ export function needsSpecRewrite(spec: ProjectSpec): boolean {
 
 export function buildSpecRewriteSystemPrompt(): string {
   return [
-    "You rewrite a ProjectSpec into clear product language.",
-    "Keep the same meaning. Do not invent features, users, or facts.",
-    "Never copy slang, fillers, chat typos, or run-on spoken answers.",
+    "You are a senior software engineer rewriting a ProjectSpec from a messy interview.",
+    "Interpret the user's intent. Do not echo chat, slang, fillers, first-person dumps, or run-on spoken answers.",
+    "Never copy slang. Write the spec an expert would write after understanding the idea.",
+    "Do not invent a different product. You MAY infer implied first-version features and tables from objects they already mentioned.",
     "Give the product a short name (1-4 words), not a sentence.",
-    "Write description, problem, goals, features, and users as complete, readable sentences.",
+    "Description says what the app is. Problem says the current pain. Those must differ.",
+    "Write goals, features, and users as complete, readable spec sentences.",
+    "If features are one chat sentence, expand them into the v1 jobs implied by the idea.",
+    "If tables are a persona or a feature title, replace them with people, objects, and events from the conversation.",
     "Keep the same language as the draft (Indonesian stays Indonesian).",
     "Preserve ids, priority, status, type, and technical sections you are not rewriting.",
     "If stack.additional is a spoken sentence about frontend or backend, map the tools into frontend/backend/database/authentication/hosting. Never leave slang in additional.",
@@ -111,7 +147,7 @@ export function buildSpecRewriteSystemPrompt(): string {
 
 export function buildSpecRewriteUserPrompt(spec: ProjectSpec): string {
   return [
-    "Rewrite the user-facing fields below so they read like a product spec, not a chat message.",
+    "Interpret these fields into expert spec language. Do not paste the chat wording.",
     "Only include sections that already exist.",
     "",
     "<spec>",
@@ -164,43 +200,41 @@ function asSentence(text: string): string {
   return next;
 }
 
-function asProblem(text: string, description: string): string {
-  const sentence = asSentence(text);
-  if (sentence !== description) {
-    return sentence;
-  }
-
-  const body = sentence.replace(/[.!?]$/, "");
-  const lowered = body.charAt(0).toLowerCase() + body.slice(1);
-  const indonesian = /\b(yang|untuk|dari|dan|warung|pencatatan|pengguna)\b/i.test(
-    body,
-  );
-  return indonesian
-    ? `Kondisi saat ini: ${lowered}.`
-    : `The current situation: ${lowered}.`;
-}
-
 function polishProject(project: ProjectSpec["project"]): ProjectSpec["project"] {
+  const uniqueFields = [...new Set([project.name, project.description, project.problem])];
+  const dump = uniqueFields.join(". ");
   const nameLooksRaw =
+    looksLikeSpokenName(project.name) ||
     looksLikeCasualSpeech(project.name) ||
-    project.name === project.description ||
-    (project.name.length > 42 && /[,;]/.test(project.name));
-  const description = looksLikeCasualSpeech(project.description)
-    ? asSentence(project.description)
-    : project.description;
-  const problemSource =
-    looksLikeCasualSpeech(project.problem) || project.problem === project.description
-      ? asProblem(project.problem, description)
-      : project.problem;
+    looksLikeActorName(project.name) ||
+    project.name === project.description;
+  const descriptionLooksRaw =
+    looksLikeCasualSpeech(project.description) || project.description === project.problem;
+  const problemLooksRaw =
+    looksLikeCasualSpeech(project.problem) || project.problem === project.description;
+
+  if (nameLooksRaw || descriptionLooksRaw || problemLooksRaw) {
+    const interpreted = interpretDiscovery(dump);
+    const language = detectAnswerLanguage(dump);
+    return {
+      ...project,
+      name: nameLooksRaw ? interpreted.name : project.name,
+      description: descriptionLooksRaw
+        ? interpretDescription(project.description, interpreted.name, language)
+        : project.description,
+      problem: problemLooksRaw
+        ? interpretProblem(project.problem, interpreted.description, language)
+        : project.problem,
+      targetUsers: project.targetUsers.map((user) =>
+        looksLikeCasualSpeech(user) ? interpretUser(user, detectAnswerLanguage(user)).name : user,
+      ),
+    };
+  }
 
   return {
     ...project,
-    name: nameLooksRaw ? titleCaseWords(project.name) : project.name,
-    description:
-      project.description === project.problem ? asSentence(project.description) : description,
-    problem: problemSource,
     targetUsers: project.targetUsers.map((user) =>
-      looksLikeCasualSpeech(user) ? titleCaseWords(user, 4) : user,
+      looksLikeCasualSpeech(user) ? interpretUser(user, detectAnswerLanguage(user)).name : user,
     ),
   };
 }
@@ -208,62 +242,82 @@ function polishProject(project: ProjectSpec["project"]): ProjectSpec["project"] 
 /** Deterministic cleanup when the model is unavailable or still copies slang. */
 export function polishSpecLocally(spec: ProjectSpec): ProjectSpec {
   const stack = spec.stack ? rescueStack(spec.stack) : spec.stack;
-  const features = shouldExpandFeatures(spec)
-    ? recommendedFeatures(spec)
-    : spec.features;
-  const database = isWeakDatabase(spec) ? recommendedDatabase(spec) : spec.database;
-  if (
-    !needsSpecRewrite(spec) &&
-    !looksLikeStackDump(spec.stack) &&
-    features === spec.features &&
-    database === spec.database
-  ) {
+  if (!needsSpecRewrite(spec) && !looksLikeStackDump(spec.stack)) {
     return stack === spec.stack ? spec : { ...spec, stack };
   }
 
-  return {
+  const interpreted: ProjectSpec = {
     ...spec,
     stack,
-    ...(features ? { features } : {}),
-    ...(database ? { database } : {}),
     project: polishProject(spec.project),
     goals: spec.goals
       ? {
           ...spec.goals,
           primary: spec.goals.primary.map((goal) => ({
             ...goal,
-            statement: looksLikeCasualSpeech(goal.statement)
-              ? asSentence(goal.statement)
-              : goal.statement,
+            statement:
+              looksLikeCasualSpeech(goal.statement) || /manual lagi|aja kali/i.test(goal.statement)
+                ? interpretGoal(goal.statement, detectAnswerLanguage(goal.statement))
+                : goal.statement,
           })),
           successCriteria: spec.goals.successCriteria.map((item) =>
-            looksLikeCasualSpeech(item) ? asSentence(item) : item,
+            looksLikeCasualSpeech(item)
+              ? interpretGoal(item, detectAnswerLanguage(item))
+              : item,
           ),
         }
       : spec.goals,
-    features: features?.map((feature) => ({
-      ...feature,
-      name:
-        looksLikeCasualSpeech(feature.name) || feature.name === feature.description
-          ? titleCaseWords(feature.name, 4)
-          : feature.name,
-      description: looksLikeCasualSpeech(feature.description)
-        ? asSentence(feature.description)
-        : feature.description,
-    })),
-    users: spec.users?.map((user) => ({
-      ...user,
-      name:
-        looksLikeCasualSpeech(user.name) || user.name === user.description
-          ? titleCaseWords(user.name, 4)
-          : user.name,
-      description: looksLikeCasualSpeech(user.description)
-        ? asSentence(user.description)
-        : user.description,
-      goals: user.goals.map((goal) =>
-        looksLikeCasualSpeech(goal) ? asSentence(goal) : goal,
-      ),
-    })),
+    users: spec.users?.map((user) => {
+      if (
+        !looksLikeCasualSpeech(user.name) &&
+        !looksLikeCasualSpeech(user.description) &&
+        user.name !== user.description
+      ) {
+        return user;
+      }
+      const next = interpretUser(
+        `${user.name}. ${user.description}`,
+        detectAnswerLanguage(`${user.name} ${user.description}`),
+      );
+      return {
+        ...user,
+        name: next.name,
+        description: next.description,
+        goals: user.goals.map((goal) =>
+          looksLikeCasualSpeech(goal)
+            ? interpretGoal(goal, detectAnswerLanguage(goal))
+            : goal,
+        ),
+      };
+    }),
+  };
+
+  const features = shouldExpandFeatures(interpreted)
+    ? recommendedFeatures(interpreted)
+    : interpreted.features;
+  const database = isWeakDatabase(interpreted)
+    ? recommendedDatabase(interpreted)
+    : interpreted.database;
+
+  return {
+    ...interpreted,
+    ...(features ? { features } : {}),
+    ...(database ? { database } : {}),
+    features: features
+      ?.filter((feature) => !looksLikeJunkLabel(feature.name))
+      .map((feature) => ({
+        ...feature,
+        name: looksLikeChattyLabel(feature.name)
+          ? titleCaseWords(feature.name.split(/\s+/)[0] ?? feature.name, 2)
+          : looksLikeCasualSpeech(feature.name) || feature.name === feature.description
+            ? titleCaseWords(feature.name, 4)
+            : feature.name,
+        description: looksLikeCasualSpeech(feature.description)
+          ? asSentence(feature.description)
+          : feature.description,
+      })),
+    aiRules:
+      (interpreted.aiRules?.length ?? 0) <= 1 ? recommendedAiRules(interpreted) : interpreted.aiRules,
   };
 }
 

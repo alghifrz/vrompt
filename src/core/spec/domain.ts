@@ -1,4 +1,15 @@
-import type { Feature, ProjectSpec } from "../schema/project-spec";
+import type { AIRule, Feature, ProjectSpec } from "../schema/project-spec";
+import { extractJobs, featuresFromJobs } from "./jobs";
+import {
+  isJobVerb,
+  isJunkNoun,
+  isMethodWord,
+  isRoleWord,
+  isVenueWord,
+  looksLikeChattyLabel,
+  looksLikeJunkLabel,
+  singularizeNoun,
+} from "./lexicon";
 
 export type SpecLanguage = "id" | "en";
 
@@ -120,9 +131,16 @@ const STOPWORDS = new Set([
   "warung",
   "shop",
   "store",
+  "mudah",
+  "semua",
+  "utama",
+  "pekerjaan",
+  "tracker",
+  "antrian",
+  "temu",
 ]);
 
-export function specCorpus(spec: ProjectSpec): string {
+export function specCorpus(spec: ProjectSpec, extra = ""): string {
   return [
     spec.project.name,
     spec.project.description,
@@ -136,6 +154,7 @@ export function specCorpus(spec: ProjectSpec): string {
       ...feature.acceptanceCriteria,
     ]),
     ...(spec.users ?? []).flatMap((user) => [user.name, user.description, ...user.goals]),
+    extra,
   ]
     .join(" ")
     .toLowerCase();
@@ -171,7 +190,7 @@ export function shouldExpandFeatures(spec: ProjectSpec, answer?: string): boolea
     return false;
   }
   const current = spec.features ?? [];
-  if (current.length >= 3) {
+  if (current.length === 0 || current.length >= 3) {
     return false;
   }
   const domain = buildDomainModel(spec);
@@ -218,10 +237,10 @@ export function isWeakDatabase(spec: ProjectSpec): boolean {
 }
 
 export function recommendedFeatures(spec: ProjectSpec, answer?: string): Feature[] {
-  const domain = buildDomainModel(spec);
+  const domain = buildDomainModel(spec, answer);
   const mentioned = [
     ...(spec.features ?? []),
-    ...featuresFromAnswer(answer, spec.features?.length ?? 0),
+    ...featuresFromAnswer(spec, answer).filter((feature) => !looksLikeJunkLabel(feature.name)),
   ];
   const merged = new Map<string, Feature>();
 
@@ -244,6 +263,74 @@ export function recommendedFeatures(spec: ProjectSpec, answer?: string): Feature
   }
 
   return [...merged.values()];
+}
+
+export function recommendedAiRules(spec: ProjectSpec): AIRule[] {
+  const language = specLanguage(spec);
+  const domain = buildDomainModel(spec);
+  const jobs = (spec.features ?? domain.features)
+    .map((feature) => feature.name)
+    .filter((name) => !looksLikeJunkLabel(name))
+    .slice(0, 6);
+  const tables = domain.entities.map((entity) => entity.name).slice(0, 7);
+  const jobList = jobs.join(", ") || spec.project.name;
+  const tableList = tables.join(", ") || spec.project.name;
+
+  if (language === "id") {
+    return [
+      {
+        id: "rule-keep-scope",
+        title: "Tetap di pekerjaan versi pertama",
+        priority: "must",
+        activationMode: "always",
+        body: `Bangun hanya pekerjaan ini dulu: ${jobList}. Jangan tambah alur di luar itu sebelum versi pertama jalan.`,
+        rationale: `Wawancara untuk ${spec.project.name} hanya butuh pekerjaan itu di versi pertama.`,
+      },
+      {
+        id: "rule-schema",
+        title: "Jangan menambah tabel di luar model",
+        priority: "must",
+        activationMode: "always",
+        body: `Pakai tabel ${tableList}. Jangan membuat tabel generik seperti Item.`,
+        rationale: "Skema kecil yang mengikuti objek wawancara lebih mudah diimplementasikan.",
+      },
+      {
+        id: "rule-keep-simple",
+        title: "Tetap buat versi pertama kecil",
+        priority: "should",
+        activationMode: "always",
+        body: "Selesaikan alur utama sampai bisa disimpan dan dilihat lagi sebelum menambah integrasi atau lapisan baru.",
+        rationale: "Versi pertama yang jalan lebih berguna daripada rancangan yang terlalu luas.",
+      },
+    ];
+  }
+
+  return [
+    {
+      id: "rule-keep-scope",
+      title: "Stay on the first-version jobs",
+      priority: "must",
+      activationMode: "always",
+      body: `Build only these jobs first: ${jobList}. Do not add extra flows until that version works.`,
+      rationale: `The interview for ${spec.project.name} only needs those jobs in v1.`,
+    },
+    {
+      id: "rule-schema",
+      title: "Do not invent tables outside the model",
+      priority: "must",
+      activationMode: "always",
+      body: `Use tables ${tableList}. Do not create a generic Item table.`,
+      rationale: "A small schema taken from the interview is easier to implement.",
+    },
+    {
+      id: "rule-keep-simple",
+      title: "Keep the first version small",
+      priority: "should",
+      activationMode: "always",
+      body: "Finish the main save-and-review flow before adding extra integrations or layers.",
+      rationale: "A working first version beats a broad unfinished design.",
+    },
+  ];
 }
 
 export function recommendedDatabase(
@@ -270,7 +357,7 @@ export function recommendedDatabase(
   };
 }
 
-export function buildDomainModel(spec: ProjectSpec): DomainModel {
+export function buildDomainModel(spec: ProjectSpec, extra = ""): DomainModel {
   const language = specLanguage(spec);
   const actorName =
     spec.users?.[0]?.name ?? spec.project.targetUsers[0] ?? (language === "id" ? "Pengguna" : "User");
@@ -285,7 +372,7 @@ export function buildDomainModel(spec: ProjectSpec): DomainModel {
     kind: "actor",
   };
 
-  const terms = interviewTerms(spec, actor.name);
+  const terms = interviewTerms(spec, actor.name, extra);
   const subjects = terms.filter((term) => term.kind === "subject" || term.kind === "supporting");
   const records = terms.filter((term) => term.kind === "record");
   const subject = subjects[0];
@@ -294,7 +381,7 @@ export function buildDomainModel(spec: ProjectSpec): DomainModel {
     subjects[1] ??
     fallbackRecord(spec, actor, language);
   const entities = dedupeNouns([actor, ...subjects, ...records, record]).slice(0, 7);
-  const features = inferredFeatures(spec, actor, entities, language);
+  const features = inferredFeatures(spec, actor, entities, language, extra);
   const relationships = inferredRelationships(actor, subject, record, entities, language);
 
   return {
@@ -303,16 +390,16 @@ export function buildDomainModel(spec: ProjectSpec): DomainModel {
     subject,
     record,
     slug: slugify(record.name),
-    endpoints: inferredEndpoints(language, subject, record),
+    endpoints: inferredEndpoints(language, subject, record, entities),
     features,
     entities,
     relationships,
   };
 }
 
-function interviewTerms(spec: ProjectSpec, actorName: string): DomainNoun[] {
+function interviewTerms(spec: ProjectSpec, actorName: string, extra = ""): DomainNoun[] {
   const language = specLanguage(spec);
-  const corpus = specCorpus(spec);
+  const corpus = specCorpus(spec, extra);
   const counts = new Map<string, number>();
   const add = (raw: string, weight: number) => {
     const word = normalizeToken(raw);
@@ -322,8 +409,11 @@ function interviewTerms(spec: ProjectSpec, actorName: string): DomainNoun[] {
     counts.set(word, (counts.get(word) ?? 0) + weight);
   };
 
-  for (const extra of namedObjects(spec, actorName)) {
-    add(extra, 4);
+  for (const job of extractJobs(spec, extra)) {
+    add(job.object, 5);
+  }
+  for (const named of namedObjects(spec, actorName)) {
+    add(named, 4);
   }
   for (const match of corpus.matchAll(
     /\b(?:kelola|catat|mencatat|mengelola|manage|record|assign)\s+([a-z]{4,})\b/g,
@@ -341,8 +431,8 @@ function interviewTerms(spec: ProjectSpec, actorName: string): DomainNoun[] {
         name,
         description:
           language === "id"
-            ? `Data ${name} yang muncul dari wawancara.`
-            : `${name} inferred from the interview.`,
+            ? `${name} yang ${actorName} kerjakan di versi pertama.`
+            : `${name} that ${actorName} works with in the first version.`,
         kind: classifyTerm(word, corpus),
       };
     });
@@ -353,9 +443,12 @@ function namedObjects(spec: ProjectSpec, actorName: string): string[] {
   for (const feature of spec.features ?? []) {
     extras.push(
       ...feature.name
-        .replace(/^(meng|mem|men|me)[a-z]*/i, "")
+        .replace(
+          /^(meng[a-z]+|mem[a-z]+|men[a-z]+|catat|kelola|lihat|ingatkan|record|manage|view|remind)\s+/i,
+          "",
+        )
         .split(/\s+/)
-        .filter((word) => word.length >= 4),
+        .filter((word) => word.length >= 4 && !looksLikeChattyLabel(word)),
     );
   }
   extras.push(
@@ -364,24 +457,32 @@ function namedObjects(spec: ProjectSpec, actorName: string): string[] {
   );
   if ((spec.features?.length ?? 0) === 0) {
     extras.push(
-      ...`${spec.project.description} ${spec.project.problem}`
-        .split(/[^\p{L}]+/u)
-        .filter((word) => word.length >= 4),
+      ...spec.project.description.split(/[^\p{L}]+/u).filter((word) => word.length >= 4),
     );
   }
   return extras.filter((word) => normalizeName(word) !== normalizeName(actorName));
 }
 
 function normalizeToken(value: string): string {
-  const word = value.toLowerCase();
-  if (word.length > 4 && word.endsWith("s") && !word.endsWith("ss")) {
-    return word.slice(0, -1);
-  }
-  return word;
+  return singularizeNoun(value);
 }
 
 function isNoiseTerm(word: string, actorName: string, projectName: string): boolean {
-  if (STOPWORDS.has(word) || isLikelyVerb(word)) {
+  if (STOPWORDS.has(word) || isLikelyVerb(word) || isMethodWord(word) || isJunkNoun(word)) {
+    return true;
+  }
+  if (isVenueWord(word)) {
+    return true;
+  }
+  if (
+    !projectName.includes(" ") &&
+    normalizeName(projectName).startsWith(normalizeName(word)) &&
+    word.length >= 4 &&
+    normalizeName(word) !== normalizeName(projectName)
+  ) {
+    return true;
+  }
+  if (isRoleWord(word) && normalizeName(actorName).startsWith(normalizeName(word))) {
     return true;
   }
   if (normalizeName(word) === normalizeName(actorName)) {
@@ -398,14 +499,15 @@ function isNoiseTerm(word: string, actorName: string, projectName: string): bool
 
 function isLikelyVerb(word: string): boolean {
   return (
+    isJobVerb(word) ||
     /^(meng|mem|men|me|di|ber)[a-z]{3,}$/.test(word) ||
-    /^(assign|show|list|help|make|keep|use|manage|record|deliver)$/.test(word)
+    /^(assign|show|list|help|make|keep|use|manage|record|deliver|catat|kelola|lihat)$/.test(word)
   );
 }
 
 function classifyTerm(word: string, corpus: string): DomainNoun["kind"] {
   if (
-    /(pembayaran|penjualan|pesanan|kehadiran|kunjungan|order|payment|visit|attendance|note)/i.test(
+    /(pembayaran|penjualan|pesanan|kehadiran|kunjungan|order|payment|visit|attendance|note|janji|habit|streak|deadline|tugas)/i.test(
       word,
     )
   ) {
@@ -446,6 +548,7 @@ function inferredFeatures(
   actor: DomainNoun,
   entities: readonly DomainNoun[],
   language: SpecLanguage,
+  extra = "",
 ): DomainFeature[] {
   const existing = (spec.features ?? []).map((item) => ({
     id: item.id,
@@ -454,11 +557,36 @@ function inferredFeatures(
     priority: item.priority,
     acceptance: item.acceptanceCriteria,
   }));
-  const extras: DomainFeature[] = [];
-  const covered = new Set(existing.map((item) => normalizeName(item.name)));
+  const extras: DomainFeature[] = featuresFromJobs(spec, extractJobs(spec, extra))
+    .filter((item) => {
+      if (looksLikeJunkLabel(item.name)) {
+        return false;
+      }
+      const key = normalizeName(item.name);
+      return !existing.some(
+        (feature) =>
+          normalizeName(feature.name) === key ||
+          normalizeName(feature.name).includes(normalizeName(item.name.replace(/^(catat|kelola|lihat|record|manage|view)\s+/i, ""))) ||
+          key.includes(normalizeName(feature.name)),
+      );
+    })
+    .map((item) => ({
+      id: item.id,
+      name: item.name,
+      description: item.description,
+      priority: item.priority,
+      acceptance: item.acceptanceCriteria,
+    }));
+  const covered = new Set(
+    [...existing, ...extras].map((item) => normalizeName(item.name)),
+  );
+
+  if (existing.length + extras.length >= 3) {
+    return [...existing, ...extras].slice(0, 6);
+  }
 
   for (const noun of entities) {
-    if (noun.kind === "actor") {
+    if (noun.kind === "actor" || isJunkNoun(noun.name) || looksLikeJunkLabel(noun.name)) {
       continue;
     }
     const manageName = language === "id" ? `Kelola ${noun.name}` : `Manage ${noun.name}`;
@@ -533,62 +661,44 @@ function inferredEndpoints(
   language: SpecLanguage,
   subject: DomainNoun | undefined,
   record: DomainNoun,
+  entities: readonly DomainNoun[] = [],
 ): DomainEndpoint[] {
-  const recordSlug = slugify(record.name);
-  const subjectSlug = subject ? slugify(subject.name) : undefined;
-  if (language === "id") {
-    return [
-      ...(subjectSlug
-        ? [
-            {
-              method: "GET" as const,
-              path: `/api/${subjectSlug}`,
-              purpose: `Ambil daftar ${subject!.name}.`,
-              authRequired: true,
-            },
-          ]
-        : []),
+  const records = [
+    record,
+    ...entities.filter((entity) => entity.kind === "record" && entity.name !== record.name),
+  ].slice(0, 3);
+  const endpoints: DomainEndpoint[] = [];
+  if (subject) {
+    const subjectSlug = slugify(subject.name);
+    endpoints.push({
+      method: "GET",
+      path: `/api/${subjectSlug}`,
+      purpose:
+        language === "id" ? `Ambil daftar ${subject.name}.` : `List ${subject.name} records.`,
+      authRequired: true,
+    });
+  }
+  for (const item of records) {
+    const recordSlug = slugify(item.name);
+    endpoints.push(
       {
         method: "GET",
         path: `/api/${recordSlug}`,
-        purpose: `Lihat daftar ${record.name}.`,
+        purpose: language === "id" ? `Lihat daftar ${item.name}.` : `List ${item.name} records.`,
         authRequired: true,
       },
       {
         method: "POST",
         path: `/api/${recordSlug}`,
-        purpose: `Simpan ${record.name} baru.`,
+        purpose: language === "id" ? `Simpan ${item.name} baru.` : `Create a ${item.name}.`,
         authRequired: true,
       },
-    ];
+    );
   }
-  return [
-    ...(subjectSlug
-      ? [
-          {
-            method: "GET" as const,
-            path: `/api/${subjectSlug}`,
-            purpose: `List ${subject!.name} records.`,
-            authRequired: true,
-          },
-        ]
-      : []),
-    {
-      method: "GET",
-      path: `/api/${recordSlug}`,
-      purpose: `List ${record.name} records.`,
-      authRequired: true,
-    },
-    {
-      method: "POST",
-      path: `/api/${recordSlug}`,
-      purpose: `Create a ${record.name}.`,
-      authRequired: true,
-    },
-  ];
+  return endpoints;
 }
 
-function featuresFromAnswer(answer: string | undefined, startIndex: number): Feature[] {
+function featuresFromAnswer(spec: ProjectSpec, answer: string | undefined): Feature[] {
   if (!answer || wantsOnlyListedFeatures(answer)) {
     return [];
   }
@@ -599,16 +709,13 @@ function featuresFromAnswer(answer: string | undefined, startIndex: number): Fea
   if (/^(ok|oke|iya|ya|lanjut|gatau|idk|skip)\b/i.test(trimmed)) {
     return [];
   }
-  return [
-    {
-      id: `feature-${String(startIndex + 1)}`,
-      name: titleCase(trimmed.split(/[,.\n]/)[0]?.trim() || trimmed).slice(0, 48),
-      description: trimmed,
-      priority: "must",
-      status: "planned",
-      acceptanceCriteria: [],
-    },
-  ];
+  const jobs = extractJobs(spec, answer);
+  const mentioned = jobs.filter(
+    (job) =>
+      trimmed.toLowerCase().includes(job.object.toLowerCase()) ||
+      trimmed.toLowerCase().includes(job.verb),
+  );
+  return featuresFromJobs(spec, mentioned.length > 0 ? mentioned : jobs.slice(0, 2));
 }
 
 function feature(

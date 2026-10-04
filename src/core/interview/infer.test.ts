@@ -44,9 +44,11 @@ describe("interview infer", () => {
       createInitialProjectSpec(),
     );
 
-    expect(patch?.project?.name).toBe("Aplikasi habit tracker namanya Daities");
-    expect(patch?.project?.description).toContain("Daities");
-    expect(patch?.project?.targetUsers).toEqual(["Primary users"]);
+    expect(patch?.project?.name).toBe("Daities");
+    expect(patch?.project?.description).toMatch(/habit tracker/i);
+    expect(patch?.project?.description).not.toMatch(/namanya/i);
+    expect(patch?.project?.problem).not.toBe(patch?.project?.description);
+    expect(patch?.project?.targetUsers).toEqual(["Pengguna utama"]);
   });
 
   it("turns a short goals answer into one primary goal", () => {
@@ -54,12 +56,13 @@ describe("interview infer", () => {
       ...createInitialProjectSpec(),
     });
 
-    expect(patch?.goals?.primary).toEqual([
-      {
-        id: "goal-1",
-        statement: "bangun pagi, olahraga, baca buku",
-      },
-    ]);
+    expect(patch?.goals?.primary[0]?.id).toBe("goal-1");
+    expect(patch?.goals?.primary[0]?.statement).toMatch(
+      /versi pertama|first version/i,
+    );
+    expect(patch?.goals?.primary[0]?.statement).not.toBe(
+      "bangun pagi, olahraga, baca buku",
+    );
   });
 
   it("maps a casual stack answer into frontend and backend", () => {

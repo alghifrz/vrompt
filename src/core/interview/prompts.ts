@@ -1,5 +1,17 @@
 import { missingInformation } from "./phases";
-import type { InterviewPhase, InterviewSession } from "./types";
+import type { InterviewMessage, InterviewPhase, InterviewSession } from "./types";
+
+function formatConversation(messages: readonly InterviewMessage[]): string {
+  const recent = messages
+    .filter((message) => message.role === "user" || message.role === "assistant")
+    .slice(-12);
+  if (recent.length === 0) {
+    return "- none yet";
+  }
+  return recent
+    .map((message) => `${message.role}: ${message.content}`)
+    .join("\n");
+}
 
 function phaseGuidance(phase: InterviewPhase): string {
   switch (phase) {
@@ -9,9 +21,10 @@ function phaseGuidance(phase: InterviewPhase): string {
       return "Capture the main outcome. Do not ask for a second goal if one is already clear.";
     case "features":
       return [
-        "Act as a senior product engineer. Read the whole interview, then write a first-version feature catalog for THIS product.",
-        "Do not copy one chat sentence as the only feature. Keep anything the user named, then add the other v1 jobs implied by the idea, problem, users, and objects they mentioned.",
-        "Usually 3-6 features. Short names, clear descriptions, one acceptance line. Same language as the user.",
+        "You just talked with the user. Understand the product the way ChatGPT would after a short discussion.",
+        "Write a first-version feature catalog for THIS product: the jobs that must exist for the idea to work.",
+        "Do not paste a chat sentence as a feature. Keep anything they named, then add the implied v1 jobs: create or record the main thing, see the list, and handle the other people or objects they mentioned.",
+        "Usually 3-6 features. Short job names, a one-sentence why, one acceptance line. Same language as the user.",
         "Do not ask for more features. Put the catalog in the patch and move on.",
       ].join(" ");
     case "users":
@@ -29,8 +42,9 @@ function phaseGuidance(phase: InterviewPhase): string {
       return "If they do not know, recommend a modular monolith and say why: one deployable app is easier for a first version.";
     case "database":
       return [
-        "Act as a senior data modeler. Infer tables from the people, objects, and events in THIS interview.",
-        "Use noun names. Do not copy a persona or a feature title as the only tables.",
+        "You understand this product from the conversation. Write the smallest schema that makes the v1 features real.",
+        "Tables are people, things they work with, and events they create. Use noun names.",
+        "Do not copy a persona or a feature title as the only tables.",
         "Add the obvious one-to-many relationships. If they do not know, still write that schema as a small Postgres start.",
       ].join(" ");
     case "api":
@@ -48,13 +62,15 @@ function phaseGuidance(phase: InterviewPhase): string {
 
 export function buildInterviewSystemPrompt(phase: InterviewPhase): string {
   return [
-    "You are an expert software developer who interviews beginners for Vrompt.",
-    "Understand slang, typos, and short answers the way a senior engineer would.",
-    "Collect facts for a ProjectSpec. You do not write application code.",
-    "Interpret the current answer into the correct structured fields, then move on.",
+    "You are an expert software engineer interviewing beginners for Vrompt.",
+    "You are not a stenographer. After a short discussion you already understand the product, the way ChatGPT would.",
+    "Write the spec an engineer would write from that understanding.",
+    "Understand slang, typos, and short answers. Collect facts for a ProjectSpec. You do not write application code.",
+    "Interpret the current answer into structured fields, then move on.",
     "Ask one focused question at a time. Never repeat the same question or the same topic.",
     "Do not invent a different product. You MAY infer implied first-version features and tables that a software engineer would include for this kind of app.",
-    "Never paste the user's raw chat wording into ProjectSpec fields.",
+    "Never paste the user's raw chat wording into ProjectSpec fields. Never echo first-person dumps.",
+    "If they name a product, use that short name. Description says what the app is. Problem says the current pain. Those three must be different.",
     "Rewrite slang and run-on answers into short, readable spec language in the same language.",
     "Product name: 1-4 words. Description and problem: complete sentences, not the same dump.",
     "You MAY recommend technical defaults when the user is unsure. Always include a short reason.",
@@ -93,6 +109,9 @@ export function buildInterviewUserPrompt(
     `Current phase: ${session.phase}`,
     `Completed: ${session.completed ? "yes" : "no"}`,
     "",
+    "Conversation so far:",
+    formatConversation(session.messages),
+    "",
     "Known project facts (canonical ProjectSpec draft):",
     JSON.stringify(session.spec, null, 2),
     "",
@@ -103,11 +122,13 @@ export function buildInterviewUserPrompt(
       ? `Latest user answer:\n${latestAnswer}`
       : "No user answer yet. Ask the first discovery question in a friendly way.",
     "",
-    "Write a complete patch for this phase from the answer or your recommendation.",
+    "Write a complete patch for this phase by interpreting the answer, not by copying it.",
     "Patch values must be rewritten spec language, never a verbatim user sentence.",
+    "If they say they want an app to record X for Y, write a short name, a product description, and a separate current-pain problem.",
     "For stack answers, put each technology in frontend, backend, database, authentication, or hosting. Do not put a spoken sentence in additional.",
-    "For features, write a small complete first-version catalog inferred from the product, not a single chat sentence.",
-    "For database, write real nouns and relationships. Do not copy a persona or a feature title as the only tables.",
+    "For features, write a complete v1 job catalog from the conversation, not a single chat sentence.",
+    "For goals and users, write outcome statements and role names, not the chat dump.",
+    "For database, write the people, objects, and events that make those jobs possible. Do not copy a persona or a feature title as the only tables.",
     "The next QUESTION must be for the following topic, not a follow-up in this phase.",
     "Do not redefine the phase.",
   ].join("\n");

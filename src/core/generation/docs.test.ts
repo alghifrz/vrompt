@@ -99,6 +99,8 @@ describe("generation docs", () => {
     expect(erd.inferred).toBe(false);
     expect(erd.entities.map((entity) => entity.name)).toEqual(["Visit", "Note"]);
     expect(erd.links[0]?.kind).toBe("one-to-many");
+    expect(erd.entities[0]?.fields.some((item) => item.name === "scheduledAt")).toBe(true);
+    expect(erd.entities[1]?.fields.some((item) => item.name === "body")).toBe(true);
     expect(erd.entities[1]?.fields.some((item) => item.name === "visitId" && item.key === "FK")).toBe(
       true,
     );
@@ -202,16 +204,83 @@ describe("generation docs", () => {
     expect(view.links.some((link) => link.from === "Guru" && link.to === "AuthSession")).toBe(
       true,
     );
+    expect(
+      view.entities
+        .find((entity) => entity.name === "Kehadiran")
+        ?.fields.some((item) => item.name === "markedAt"),
+    ).toBe(true);
     expect(erd).toContain("Kehadiran");
     expect(erd).toMatch(/Daftar Kehadiran|Lihat daftar Kehadiran|List Kehadiran/);
     expect(prd).toContain("Sebagai Guru");
     expect(prd).toContain("supaya mencatat kehadiran siswa secara digital");
+    expect(prd).toContain("Versi pertama ada untuk");
+    expect(prd).toContain("mengabsen satu kelas");
+    expect(prd).toContain("Sesi pertama yang wajar: guru masuk, lalu menyelesaikan Mengabsen Siswa");
+    expect(prd).toMatch(/menyimpan Siswa|mengisi Siswa|markedAt|Mengabsen Siswa/);
+    expect(prd).not.toContain("guru atau pengguna");
     expect(prd).not.toContain("As a user, I want mengabsen");
     expect(prd).not.toMatch(/GET\s+\| \/api\/items/);
     expect(prd).not.toContain("TaskFlow");
     expect(prd).toContain("/api/siswa");
     expect(prd).toContain("/api/kehadiran");
     expect(prd).toContain("Mengabsen Siswa");
+  });
+
+  it("writes a bookstore PRD from stock and sales jobs, not generic copy", () => {
+    const bookstore: ProjectSpec = {
+      project: {
+        name: "Toko Buku",
+        description: "Aplikasi web untuk pemilik toko buku mencatat stok dan penjualan.",
+        problem: "Penjualan dan stok masih dicatat manual.",
+        targetUsers: ["Pemilik toko buku"],
+        type: "web application",
+        status: "ready",
+      },
+      features: [
+        {
+          id: "feature-stok",
+          name: "Catat Stok",
+          description: "Fitur untuk menyimpan jumlah stok buku.",
+          priority: "must",
+          status: "planned",
+          acceptanceCriteria: [],
+        },
+        {
+          id: "feature-jual",
+          name: "Catat Penjualan",
+          description: "Fitur untuk menyimpan transaksi penjualan.",
+          priority: "must",
+          status: "planned",
+          acceptanceCriteria: [],
+        },
+        {
+          id: "feature-bayar",
+          name: "Catat Pembayaran",
+          description: "Fitur untuk mencatat pembayaran pelanggan.",
+          priority: "later",
+          status: "planned",
+          acceptanceCriteria: [],
+        },
+      ],
+      users: [
+        {
+          id: "user-1",
+          name: "Penjual Toko Buku",
+          description: "Pemilik toko.",
+          goals: ["Jualan"],
+          permissions: ["use-app"],
+        },
+      ],
+    };
+
+    const prd = renderPrd(bookstore);
+    expect(prd).toContain("Sebagai Penjual Toko Buku");
+    expect(prd).toContain("Catat Stok → Catat Penjualan → Catat Pembayaran");
+    expect(prd).toMatch(/Jumlah yang diisi|quantity/i);
+    expect(prd).toMatch(/Nilai uang yang diisi|amount/i);
+    expect(prd).toMatch(/pembayaran hanya dicatat|real account/i);
+    expect(prd).not.toContain("guru atau pengguna");
+    expect(prd).not.toContain("As a user, I want");
   });
 
   it("builds a bookstore ERD from the product, not from one feature title", () => {
@@ -251,6 +320,20 @@ describe("generation docs", () => {
     );
     expect(names).not.toContain("Pembayaran via Rekening Tetap");
     expect(erd.links.length).toBeGreaterThanOrEqual(2);
+
+    const fields = Object.fromEntries(
+      erd.entities.map((entity) => [entity.name, entity.fields.map((item) => item.name)]),
+    );
+    if (fields.Stok) {
+      expect(fields.Stok).toContain("quantity");
+    }
+    if (fields.Pembayaran) {
+      expect(fields.Pembayaran).toContain("amount");
+      expect(fields.Pembayaran).toContain("method");
+    }
+    if (fields.Penjualan) {
+      expect(fields.Penjualan.some((name) => name === "amount" || name === "quantity")).toBe(true);
+    }
   });
 
   it("includes PRD.md and ERD.md", () => {

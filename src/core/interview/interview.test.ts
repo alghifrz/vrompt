@@ -296,7 +296,8 @@ describe("InterviewEngine", () => {
       const result = await engine.runTurn(session, "Still thinking.");
 
       expect(result.extracted).toBe(true);
-      expect(result.session.spec.project.name).toBe("Still thinking");
+      expect(result.session.spec.project.name).toBe("Still Thinking");
+      expect(result.session.spec.project.description).not.toBe("Still thinking.");
       expect(result.session.phase).toBe("goals");
     });
 
@@ -620,7 +621,8 @@ describe("InterviewEngine", () => {
         ],
       );
 
-      expect(session.spec.aiRules?.[0]?.id).toBe("rule-keep-simple");
+      expect(session.spec.aiRules?.some((rule) => rule.id === "rule-keep-scope")).toBe(true);
+      expect(session.spec.aiRules?.length).toBeGreaterThanOrEqual(2);
       expect(session.phase).toBe("review");
     });
   });
@@ -730,7 +732,7 @@ describe("InterviewEngine", () => {
       await engine.runTurn(createInterviewSession({ id: "int-1" }), "Hello");
 
       expect(provider.requests).toHaveLength(1);
-      expect(provider.requests[0]?.temperature).toBe(0);
+      expect(provider.requests[0]?.temperature).toBe(0.3);
     });
 
     it("propagates a provider rate-limit error with the original cause", async () => {

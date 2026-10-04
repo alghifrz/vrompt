@@ -2,11 +2,18 @@ import type { ProjectSpec } from "../schema/project-spec";
 import {
   buildDomainModel,
   isWeakDatabase,
+  recommendedAiRules,
   recommendedDatabase,
   recommendedFeatures,
   shouldExpandFeatures,
 } from "../spec/domain";
 import { interpretStackAnswer } from "../spec/stack";
+import {
+  detectAnswerLanguage,
+  interpretDiscovery,
+  interpretGoal,
+  interpretUser,
+} from "./interpret";
 import {
   INITIAL_PROJECT,
   hasArchitecture,
@@ -116,11 +123,6 @@ function clip(value: string, max: number): string {
   return trimmed.slice(0, max) || trimmed;
 }
 
-function inferName(answer: string): string {
-  const first = answer.split(/\n|[.!?]/)[0]?.trim() || answer.trim();
-  return clip(first, 48);
-}
-
 export function inferPhasePatch(
   phase: InterviewPhase,
   answer: string,
@@ -133,24 +135,25 @@ export function inferPhasePatch(
 
   switch (phase) {
     case "discovery": {
+      const interpreted = interpretDiscovery(text);
       const project: NonNullable<ProjectSpecPatch["project"]> = {};
       if (spec.project.name === INITIAL_PROJECT.name) {
-        project.name = inferName(text);
+        project.name = interpreted.name;
       }
       if (spec.project.description === INITIAL_PROJECT.description) {
-        project.description = text;
+        project.description = interpreted.description;
       }
       if (spec.project.problem === INITIAL_PROJECT.problem) {
-        project.problem = text;
+        project.problem = interpreted.problem;
       }
       if (spec.project.type === INITIAL_PROJECT.type) {
-        project.type = "web application";
+        project.type = interpreted.type;
       }
       if (
         spec.project.targetUsers.length === 1 &&
         spec.project.targetUsers[0] === INITIAL_PROJECT.targetUsers[0]
       ) {
-        project.targetUsers = ["Primary users"];
+        project.targetUsers = interpreted.targetUsers;
       }
       return Object.keys(project).length > 0 ? { project } : undefined;
     }
@@ -160,7 +163,12 @@ export function inferPhasePatch(
       }
       return {
         goals: {
-          primary: [{ id: "goal-1", statement: clip(text, 200) }],
+          primary: [
+            {
+              id: "goal-1",
+              statement: interpretGoal(text, detectAnswerLanguage(text)),
+            },
+          ],
           successCriteria: [],
         },
       };
@@ -169,21 +177,23 @@ export function inferPhasePatch(
         return undefined;
       }
       return { features: recommendedFeatures(spec, text) };
-    case "users":
+    case "users": {
       if (spec.users?.length) {
         return undefined;
       }
+      const user = interpretUser(text, detectAnswerLanguage(text));
       return {
         users: [
           {
             id: "user-1",
-            name: inferName(text) || "Primary user",
-            description: text,
-            goals: [clip(text, 120)],
+            name: user.name,
+            description: user.description,
+            goals: user.goals,
             permissions: ["use-app"],
           },
         ],
       };
+    }
     case "stack": {
       const stack = interpretStackAnswer(text, spec.stack);
       if (stack.frontend || stack.backend || stack.database || stack.authentication || stack.hosting) {
@@ -283,21 +293,11 @@ export function recommendPhasePatch(
         },
       };
     case "ai_rules":
-      if (spec.aiRules && spec.aiRules.length > 0) {
+      if (spec.aiRules && spec.aiRules.length > 1) {
         return undefined;
       }
       return {
-        aiRules: [
-          {
-            id: "rule-keep-simple",
-            title: "Keep the first version small",
-            priority: "must",
-            activationMode: "always",
-            body: "Build the smallest useful version before adding extra layers or tools.",
-            rationale:
-              "Beginners finish faster when the first version stays simple and working.",
-          },
-        ],
+        aiRules: recommendedAiRules(spec),
       };
     default:
       return undefined;
