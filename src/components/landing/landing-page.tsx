@@ -7,10 +7,10 @@ import { LandingHeader } from "./header";
 import { LandingHero } from "./hero";
 import { LandingHowItWorks } from "./how-it-works";
 import { LandingImpact } from "./impact";
-import { LandingPricing } from "./pricing";
+// import { LandingPricing } from "./pricing";
 import { LandingSpotlights } from "./spotlights";
 import { landingShellClass } from "./styles";
-import { LandingTestimonials } from "./testimonials";
+// import { LandingTestimonials } from "./testimonials";
 
 export function LandingPage() {
   return (
