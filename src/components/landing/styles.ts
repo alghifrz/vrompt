@@ -26,7 +26,7 @@ export const ghostButtonClass =
 export const navItems = [
   { href: "#features", label: "Features" },
   { href: "#benefits", label: "Benefits" },
-  { href: "#testimonials", label: "Testimonials" },
-  { href: "#pricing", label: "Pricing" },
+  // { href: "#testimonials", label: "Testimonials" },
+  // { href: "#pricing", label: "Pricing" },
   { href: "#faqs", label: "FAQs" },
 ] as const;

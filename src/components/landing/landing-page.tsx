@@ -30,8 +30,8 @@ export function LandingPage() {
         <LandingComparison />
         <LandingHowItWorks />
         <LandingImpact />
-        <LandingTestimonials />
-        <LandingPricing />
+        {/* <LandingTestimonials /> */}
+        {/* <LandingPricing /> */}
         <LandingFaq />
         <LandingCta />
       </main>
